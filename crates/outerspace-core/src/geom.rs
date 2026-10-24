@@ -34,6 +34,11 @@ impl Rect {
         x >= self.x && x < self.right() && y >= self.y && y < self.bottom()
     }
 
+    /// The point inside this rectangle closest to (`x`, `y`).
+    pub fn clamp(&self, x: i32, y: i32) -> (i32, i32) {
+        (x.clamp(self.x, (self.right() - 1).max(self.x)), y.clamp(self.y, (self.bottom() - 1).max(self.y)))
+    }
+
     pub fn intersection(&self, other: &Rect) -> Option<Rect> {
         let x = self.x.max(other.x);
         let y = self.y.max(other.y);
