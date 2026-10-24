@@ -1,5 +1,7 @@
 <p align="center">
-  <img src="assets/icon/outerspace-1024.png" width="160" alt="Ícone do OuterSpace">
+  <img src="assets/icon/variants/outerspace-orb.png" width="120" alt="Ícone candidato: Orb">
+  <img src="assets/icon/variants/outerspace-eclipse.png" width="120" alt="Ícone candidato: Eclipse">
+  <img src="assets/icon/variants/outerspace-spark.png" width="120" alt="Ícone candidato: Spark">
 </p>
 
 <h1 align="center">OuterSpace</h1>
@@ -49,12 +51,16 @@ OpenCode é configurado pelo próprio app em `opencode.json` (veja §7 do plano)
 
 ## Design
 
-A UI e o ícone seguem o **Liquid Glass do macOS 27 Golden Gate**: vidro refinado com refração uniforme, contraste priorizando legibilidade, cantos consistentes, toolbar unificada e ícone em camadas com profundidade. O acento é o laranja "International Orange" da ponte. Tokens e regras estão em §6.3 do plano.
+A UI e o ícone seguem o **Liquid Glass do macOS 27 Golden Gate**: vidro refinado com refração uniforme, contraste priorizando legibilidade, cantos consistentes, toolbar unificada e ícone em camadas com profundidade. O acento é o laranja "International Orange" da ponte. Tokens e regras estão em §6.3 do plano. A UI é em inglês por padrão.
 
-O ícone atual (`assets/icon/outerspace.svg`) é um rascunho v0 gerado por [`scripts/gen-icon.mjs`](scripts/gen-icon.mjs):
+O ícone está em escolha entre três candidatos — **Orb**, **Eclipse** e **Spark** — com o mesmo fundo e anel orbital:
+
+![Comparação dos ícones](assets/icon/variants/comparison.png)
+
+Todos são gerados por [`scripts/gen-icon.mjs`](scripts/gen-icon.mjs):
 
 ```sh
-node scripts/gen-icon.mjs assets/icon/outerspace.svg
+node scripts/gen-icon.mjs assets/icon/variants
 ```
 
 ## Roadmap
@@ -72,3 +78,7 @@ node scripts/gen-icon.mjs assets/icon/outerspace.svg
 
 - Windows 11 (funciona no Home — não precisa de Hyper-V nem Sandbox)
 - Para desenvolver: Rust 1.97+, Node 20+
+
+## Licença
+
+[MIT](LICENSE)
