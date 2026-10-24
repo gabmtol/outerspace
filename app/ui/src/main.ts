@@ -16,6 +16,8 @@ const powerCard = $("#power");
 const powerSwitch = $<HTMLButtonElement>("#power-switch");
 const statusText = $("#status-text");
 const statusDetail = $("#status-detail");
+const detailLine = $("#detail-line");
+const peekButton = $<HTMLButtonElement>("#btn-peek");
 const powerActions = $("#power-actions");
 const installButton = $<HTMLButtonElement>("#btn-install");
 const retryButton = $<HTMLButtonElement>("#btn-retry");
@@ -72,7 +74,8 @@ function render(status: Status): void {
     }
   }
   statusDetail.textContent = detail;
-  statusDetail.hidden = detail === "";
+  peekButton.hidden = power.kind !== "on";
+  detailLine.hidden = detail === "" && peekButton.hidden;
 
   installButton.disabled = status.installing;
   installButton.textContent = t(status.installing ? "actions.installing" : "actions.installDriver");
@@ -190,6 +193,7 @@ manualButton.addEventListener("click", () => {
 });
 
 for (const id of ["#btn-logs", "#btn-log"]) $(id).addEventListener("click", () => run("open_logs"));
+peekButton.addEventListener("click", () => run("open_peek"));
 
 if (inTauri) {
   const appWindow = getCurrentWindow();

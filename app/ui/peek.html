@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OuterSpace — Virtual display</title>
+  <link rel="stylesheet" href="./src/fonts.css">
+  <link rel="stylesheet" href="./src/tokens.css">
+  <link rel="stylesheet" href="./src/glass.css">
+  <link rel="stylesheet" href="./src/peek.css">
+</head>
+<body class="solid peek">
+  <div class="window">
+    <header class="titlebar" data-tauri-drag-region>
+      <div class="lights">
+        <button class="light close" id="btn-close" data-i18n-title="peek.close">
+          <svg viewBox="0 0 8 8" aria-hidden="true"><path d="M2 2l4 4M6 2l-4 4"/></svg>
+        </button>
+        <button class="light minimize" id="btn-minimize" data-i18n-title="window.minimize">
+          <svg viewBox="0 0 8 8" aria-hidden="true"><path d="M1.5 4h5"/></svg>
+        </button>
+        <button class="light maximize" id="btn-maximize" data-i18n-title="peek.maximize">
+          <svg viewBox="0 0 8 8" aria-hidden="true"><path d="M2.2 5.8V2.2h3.6M5.8 2.2v3.6H2.2"/></svg>
+        </button>
+      </div>
+      <div class="title" id="title" data-i18n="peek.title"></div>
+    </header>
+    <main class="stage">
+      <img id="frame" alt="" draggable="false">
+      <p class="empty" id="empty" data-i18n="peek.off" hidden></p>
+    </main>
+  </div>
+  <script type="module" src="./src/peek.ts"></script>
+</body>
+</html>

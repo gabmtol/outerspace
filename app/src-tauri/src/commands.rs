@@ -124,6 +124,11 @@ fn clients() -> Vec<ClientInfo> {
 }
 
 #[tauri::command]
+pub fn open_peek(app: AppHandle) {
+    crate::peek::open(&app);
+}
+
+#[tauri::command]
 pub fn open_logs() -> Result<(), String> {
     std::process::Command::new("explorer.exe").arg(paths::logs_dir()).spawn().map(drop).map_err(|e| e.to_string())
 }

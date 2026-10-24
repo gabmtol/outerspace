@@ -2,6 +2,7 @@
 
 mod commands;
 mod i18n;
+mod peek;
 mod tray;
 
 use std::sync::Arc;
@@ -35,7 +36,9 @@ fn main() {
             commands::client_snippets,
             commands::add_client,
             commands::open_logs,
+            commands::open_peek,
         ])
+        .register_asynchronous_uri_scheme_protocol(peek::SCHEME, peek::serve)
         .setup(|app| {
             let handle = app.handle().clone();
             let settings = config::load_or_create();

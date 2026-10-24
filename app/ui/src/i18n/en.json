@@ -18,6 +18,15 @@
     "windows": "{count} windows on the virtual display.",
     "toggle": "Virtual display"
   },
+  "peek": {
+    "open": "Peek",
+    "openTitle": "Watch the virtual display live",
+    "title": "Virtual display",
+    "titleOn": "Virtual display · {width}×{height}",
+    "off": "OuterSpace is off. Switch it on to see the virtual display.",
+    "close": "Close",
+    "maximize": "Maximize"
+  },
   "errors": {
     "driverMissing": "Driver not installed",
     "driverMissingDetail": "OuterSpace needs the Parsec virtual display driver. Installing it asks for administrator permission once.",
@@ -65,6 +74,7 @@
     "turnOn": "Turn on",
     "turnOff": "Turn off",
     "open": "Open OuterSpace",
+    "peek": "Peek at the virtual display",
     "fence": "Keep my mouse out of the virtual display",
     "autostart": "Start with Windows",
     "quit": "Quit"
