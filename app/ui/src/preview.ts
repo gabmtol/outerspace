@@ -33,7 +33,7 @@ const status: Status = {
   power: power(),
   installing: false,
   port: 7342,
-  version: "0.1.1",
+  version: "0.1.2",
   autostart: false,
   transparency: true,
   windows:
