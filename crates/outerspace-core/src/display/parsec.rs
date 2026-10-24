@@ -82,9 +82,29 @@ const INSTALLER_SHA256: &str = "e23332448fdaf5aa017cb308db5ef6855fac526a7ded05d8
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// Offered resolutions: the driver's built-in modes in the common aspect ratios (16:9, 16:10,
+/// 21:9). The driver has every one of them at 60 Hz (docs/PARSEC_VDD_SPECS.md in parsec-vdd).
+const MODES: [(u32, u32); 13] = [
+    (1280, 720),
+    (1280, 800),
+    (1366, 768),
+    (1440, 900),
+    (1600, 900),
+    (1680, 1050),
+    (1920, 1080),
+    (1920, 1200),
+    (2560, 1080),
+    (2560, 1440),
+    (2560, 1600),
+    (3440, 1440),
+    (3840, 2160),
+];
+
 #[derive(Default)]
 pub struct ParsecVdd {
     session: Option<Session>,
+    /// GDI name of the output driving the display, while connected.
+    output: Option<String>,
 }
 
 impl ParsecVdd {
@@ -121,10 +141,24 @@ impl VirtualDisplayBackend for ParsecVdd {
         tracing::debug!(elapsed = ?started.elapsed(), "display placed");
         tracing::info!(?info, index, "virtual display connected");
         self.session = Some(session);
+        self.output = Some(name);
+        Ok(info)
+    }
+
+    fn modes(&self) -> Vec<DisplayMode> {
+        MODES.iter().map(|&(width, height)| DisplayMode { width, height, hz: 60 }).collect()
+    }
+
+    fn set_mode(&mut self, mode: DisplayMode) -> Result<DisplayInfo, DisplayError> {
+        let output = self.output.as_deref().ok_or_else(|| DisplayError::Failed("the virtual display is off".into()))?;
+        // Re-placed, not just resized: the one-pixel contact with the desktop depends on the height.
+        let info = layout::place_beside_desktop(output, mode)?;
+        tracing::info!(?info, "virtual display mode changed");
         Ok(info)
     }
 
     fn disconnect(&mut self) {
+        self.output = None;
         if let Some(session) = self.session.take() {
             drop(session);
             tracing::info!("virtual display disconnected");
@@ -485,6 +519,33 @@ mod tests {
         let after = layout::dump();
         println!("--- after disconnect\n{after}");
         assert!(!after.contains(MONITOR_ID), "the virtual monitor is still there");
+    }
+
+    /// Every offered mode applies to a live display, which stays touching the desktop's corner.
+    /// `cargo test -p outerspace-core every_offered -- --ignored --nocapture`
+    #[test]
+    #[ignore = "needs the Parsec driver; resizes a real virtual display a dozen times"]
+    fn every_offered_mode_applies_to_the_live_display() {
+        let mut vdd = ParsecVdd::new();
+        let first = vdd.connect(DisplayMode::DEFAULT).expect("connect");
+        let corner = (first.x, first.y + first.height as i32);
+        for mode in vdd.modes() {
+            let started = std::time::Instant::now();
+            let info = vdd.set_mode(mode).expect("set mode");
+            println!(
+                "{}x{}: at ({}, {}) {} Hz in {:.2?}",
+                info.width,
+                info.height,
+                info.x,
+                info.y,
+                info.hz,
+                started.elapsed()
+            );
+            assert_eq!((info.width, info.height), (mode.width, mode.height));
+            assert_eq!((info.x, info.y + info.height as i32), corner, "the display left the corner");
+        }
+        vdd.set_mode(DisplayMode::DEFAULT).expect("back to the default");
+        vdd.disconnect();
     }
 
     /// Acceptance check for phase F1: on in ≤ 3 s, off in ≤ 2 s, 20 cycles without disturbing the

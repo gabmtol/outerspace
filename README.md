@@ -126,6 +126,11 @@ O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. 
 | F3 | Clique, teclado e scroll sem roubar cursor/foco; cerca de mouse | ✅ post (Win32 e Chromium) e borrow verificados |
 | F4 | Shim stdio + setup de Claude Code, Codex e OpenCode | ✅ agente real no Claude Code |
 | F5 | Polimento, instalador, iniciar com o Windows | ✅ instalador sem admin; 0,04% CPU e 40 MB com o monitor ligado |
+| v1 | Peek: o monitor virtual ao vivo numa janela | ✅ |
+| v1 | Escolher a resolução (1280×720 a 3840×2160) | ✅ |
+| v1 | `ui_tree` e `wait_for` para os agentes | |
+| v1 | Atualização automática | |
+| v1 | `drag` e `focus_window` | |
 
 ## Licença
 

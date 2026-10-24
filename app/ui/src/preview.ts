@@ -37,9 +37,18 @@ const status: Status = {
   autostart: false,
   transparency: true,
   windowsOnDisplay: params.get("state") === "on" ? 2 : null,
+  mode: { width: 1920, height: 1080, hz: 60 },
+  modes: [
+    [1280, 720], [1280, 800], [1366, 768], [1440, 900], [1600, 900], [1680, 1050], [1920, 1080],
+    [1920, 1200], [2560, 1080], [2560, 1440], [2560, 1600], [3440, 1440], [3840, 2160],
+  ].map(([width, height]) => ({ width, height, hz: 60 })),
 };
 
-export async function invoke<T>(cmd: string): Promise<T> {
+export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (cmd === "set_resolution") {
+    status.mode = { width: Number(args?.width), height: Number(args?.height), hz: 60 };
+    if (status.power.kind === "on") status.power.display = { ...status.power.display, ...status.mode };
+  }
   const replies: Record<string, unknown> = { status, client_snippets: snippets };
   return (replies[cmd] ?? status) as T;
 }

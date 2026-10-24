@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use outerspace_core::setup::{self, Client, ClientInfo};
-use outerspace_core::{MCP_PORT, PowerController, PowerState, apps, paths, system};
+use outerspace_core::{DisplayMode, MCP_PORT, PowerController, PowerState, apps, config, paths, system};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
@@ -30,6 +30,9 @@ pub struct Status {
     transparency: bool,
     /// Windows mostly on the virtual display, while it is on.
     windows_on_display: Option<usize>,
+    /// The chosen resolution, and the ones to choose from.
+    mode: DisplayMode,
+    modes: Vec<DisplayMode>,
 }
 
 pub fn snapshot(app: &AppHandle) -> Status {
@@ -50,6 +53,8 @@ pub fn snapshot(app: &AppHandle) -> Status {
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
         transparency: system::transparency_enabled(),
         windows_on_display,
+        mode: state.power.mode(),
+        modes: state.power.modes().to_vec(),
     }
 }
 
@@ -86,6 +91,29 @@ pub async fn install_driver(app: AppHandle) -> Result<Status, String> {
     let power = state.power.clone();
     let _ = tauri::async_runtime::spawn_blocking(move || power.install_driver()).await;
     state.installing.store(false, Ordering::Relaxed);
+    publish(&app);
+    Ok(snapshot(&app))
+}
+
+/// Chooses the virtual display's resolution, remembered across restarts. A display that is on
+/// switches right away.
+#[tauri::command]
+pub async fn set_resolution(app: AppHandle, width: u32, height: u32) -> Result<Status, String> {
+    let power = app.state::<AppState>().power.clone();
+    let mode = power
+        .modes()
+        .iter()
+        .copied()
+        .find(|m| (m.width, m.height) == (width, height))
+        .ok_or_else(|| format!("{width}×{height} is not an available resolution"))?;
+    tauri::async_runtime::spawn_blocking(move || power.set_mode(mode))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    let mut settings = config::load_or_create();
+    settings.mode = mode;
+    config::save(&settings);
+    tracing::info!(width, height, "resolution chosen");
     publish(&app);
     Ok(snapshot(&app))
 }

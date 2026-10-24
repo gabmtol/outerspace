@@ -8,6 +8,12 @@ export interface DisplayInfo {
   y: number;
 }
 
+export interface DisplayMode {
+  width: number;
+  height: number;
+  hz: number;
+}
+
 export type ErrorCode =
   | "driverMissing"
   | "driverDisabled"
@@ -30,6 +36,9 @@ export interface Status {
   autostart: boolean;
   transparency: boolean;
   windowsOnDisplay: number | null;
+  /** The chosen resolution, and the ones to choose from. */
+  mode: DisplayMode;
+  modes: DisplayMode[];
 }
 
 export interface ClientSnippet {

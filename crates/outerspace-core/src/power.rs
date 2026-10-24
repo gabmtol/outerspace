@@ -39,6 +39,10 @@ pub struct PowerController {
     /// Also serializes power operations: only one connect/disconnect/install runs at a time.
     backend: Mutex<Box<dyn VirtualDisplayBackend>>,
     state: Mutex<PowerState>,
+    /// The resolution chosen by the user, kept while the display is off.
+    mode: Mutex<DisplayMode>,
+    /// The backend's offered modes, read once: asking the backend would wait out a connect.
+    modes: Vec<DisplayMode>,
     listener: Listener,
 }
 
@@ -49,7 +53,13 @@ impl PowerController {
         listener: impl Fn(&PowerState) + Send + Sync + 'static,
     ) -> Self {
         let state = driver_problem(backend.driver_status()).unwrap_or(PowerState::Off);
-        PowerController { backend: Mutex::new(backend), state: Mutex::new(state), listener: Box::new(listener) }
+        PowerController {
+            modes: backend.modes(),
+            backend: Mutex::new(backend),
+            state: Mutex::new(state),
+            mode: Mutex::new(DisplayMode::DEFAULT),
+            listener: Box::new(listener),
+        }
     }
 
     pub fn state(&self) -> PowerState {
@@ -58,6 +68,34 @@ impl PowerController {
 
     pub fn is_on(&self) -> bool {
         matches!(self.state(), PowerState::On { .. })
+    }
+
+    /// The resolution the display has, or gets when it turns on.
+    pub fn mode(&self) -> DisplayMode {
+        *lock(&self.mode)
+    }
+
+    /// The resolutions [`set_mode`](Self::set_mode) accepts, smallest first.
+    pub fn modes(&self) -> &[DisplayMode] {
+        &self.modes
+    }
+
+    /// Chooses the resolution. A display that is on switches right away; if Windows refuses the
+    /// mode, the display and the choice stay as they were.
+    pub fn set_mode(&self, mode: DisplayMode) -> Result<PowerState, DisplayError> {
+        if !self.modes.contains(&mode) {
+            return Err(DisplayError::Failed(format!("{}×{} is not an available resolution", mode.width, mode.height)));
+        }
+        let mut backend = lock(&self.backend);
+        if let PowerState::On { display } = self.state()
+            && (display.width, display.height) != (mode.width, mode.height)
+        {
+            let display = backend.set_mode(mode)?;
+            *lock(&self.mode) = mode;
+            return Ok(self.set(PowerState::On { display }));
+        }
+        *lock(&self.mode) = mode;
+        Ok(self.state())
     }
 
     /// Blocks while the display is plugged in and arranged (a few seconds at most).
@@ -99,7 +137,7 @@ impl PowerController {
 
     fn connect(&self, backend: &mut MutexGuard<'_, Box<dyn VirtualDisplayBackend>>) -> PowerState {
         self.set(PowerState::Starting);
-        match backend.connect(DisplayMode::DEFAULT) {
+        match backend.connect(self.mode()) {
             Ok(display) => self.set(PowerState::On { display }),
             Err(DisplayError::Driver(status)) => self.set(
                 driver_problem(status).unwrap_or(PowerState::Error { code: ErrorCode::ConnectFailed, message: None }),
@@ -169,14 +207,18 @@ mod tests {
             if self.fail_connect {
                 return Err(DisplayError::Failed("boom".into()));
             }
-            Ok(DisplayInfo {
-                width: mode.width,
-                height: mode.height,
-                hz: mode.hz,
-                x: 1920,
-                y: -1079,
-                device_name: "fake".into(),
-            })
+            Ok(placed(mode))
+        }
+
+        fn modes(&self) -> Vec<DisplayMode> {
+            vec![DisplayMode::DEFAULT, QHD]
+        }
+
+        fn set_mode(&mut self, mode: DisplayMode) -> Result<DisplayInfo, DisplayError> {
+            if self.fail_connect {
+                return Err(DisplayError::Failed("Windows rejected the display mode".into()));
+            }
+            Ok(placed(mode))
         }
 
         fn disconnect(&mut self) {}
@@ -184,6 +226,20 @@ mod tests {
         fn install_driver(&mut self) -> Result<(), DisplayError> {
             self.status = self.status_after_install;
             Ok(())
+        }
+    }
+
+    const QHD: DisplayMode = DisplayMode { width: 2560, height: 1440, hz: 60 };
+
+    /// Where a display in `mode` lands next to a 1920×1080 screen.
+    fn placed(mode: DisplayMode) -> DisplayInfo {
+        DisplayInfo {
+            width: mode.width,
+            height: mode.height,
+            hz: mode.hz,
+            x: 1920,
+            y: 1 - mode.height as i32,
+            device_name: "fake".into(),
         }
     }
 
@@ -253,6 +309,44 @@ mod tests {
             ..Fake::ready()
         });
         assert_eq!(power.install_driver(), PowerState::Error { code: ErrorCode::RestartRequired, message: None });
+    }
+
+    #[test]
+    fn a_mode_chosen_while_off_is_used_when_turning_on() {
+        let (power, seen) = controller(Fake::ready());
+        assert_eq!(power.set_mode(QHD).unwrap(), PowerState::Off);
+        assert!(seen.lock().unwrap().is_empty());
+        assert_eq!(power.turn_on(), PowerState::On { display: placed(QHD) });
+        assert_eq!(power.mode(), QHD);
+    }
+
+    #[test]
+    fn changing_the_mode_while_on_switches_the_live_display() {
+        let (power, seen) = controller(Fake::ready());
+        power.turn_on();
+        assert_eq!(power.set_mode(QHD).unwrap(), PowerState::On { display: placed(QHD) });
+        assert_eq!(power.state(), PowerState::On { display: placed(QHD) });
+        assert_eq!(kinds(&seen.lock().unwrap()), ["starting", "on", "on"]);
+    }
+
+    #[test]
+    fn a_refused_mode_leaves_the_display_and_the_choice_alone() {
+        let (power, _) = controller(Fake::ready());
+        power.turn_on();
+        // Same switch as a failed connect, flipped after turning on.
+        let mut backend = lock(&power.backend);
+        *backend = Box::new(Fake { fail_connect: true, ..Fake::ready() });
+        drop(backend);
+        assert!(power.set_mode(QHD).is_err());
+        assert_eq!(power.mode(), DisplayMode::DEFAULT);
+        assert_eq!(power.state(), PowerState::On { display: placed(DisplayMode::DEFAULT) });
+    }
+
+    #[test]
+    fn modes_the_backend_does_not_offer_are_rejected() {
+        let (power, _) = controller(Fake::ready());
+        assert!(power.set_mode(DisplayMode { width: 1000, height: 1000, hz: 60 }).is_err());
+        assert_eq!(power.mode(), DisplayMode::DEFAULT);
     }
 
     impl PowerState {

@@ -18,6 +18,12 @@
     "windows": "{count} windows on the virtual display.",
     "toggle": "Virtual display"
   },
+  "display": {
+    "resolution": "Resolution",
+    "resolutionTitle": "Size of the virtual display. Bigger fits more on screen, but agents' screenshots get heavier.",
+    "mode": "{width} × {height}",
+    "changed": "Virtual display set to {width} × {height}"
+  },
   "peek": {
     "open": "Peek",
     "openTitle": "Watch the virtual display live",

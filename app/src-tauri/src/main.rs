@@ -31,6 +31,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::status,
             commands::set_power,
+            commands::set_resolution,
             commands::install_driver,
             commands::set_autostart,
             commands::client_snippets,
@@ -51,6 +52,9 @@ fn main() {
                 });
                 commands::publish(&handle)
             }));
+            if let Err(err) = power.set_mode(settings.mode) {
+                tracing::warn!(%err, "saved resolution ignored");
+            }
             let mcp_stop = CancellationToken::new();
             tauri::async_runtime::spawn({
                 let (power, stop) = (power.clone(), mcp_stop.clone());

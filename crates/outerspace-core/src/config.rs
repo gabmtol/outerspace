@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use windows::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom};
 
+use crate::DisplayMode;
 use crate::paths;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,6 +14,9 @@ pub struct Config {
     /// Keep the user's mouse out of the virtual display (tray menu).
     #[serde(default = "on")]
     pub fence: bool,
+    /// The virtual display's resolution.
+    #[serde(default)]
+    pub mode: DisplayMode,
 }
 
 fn on() -> bool {
@@ -28,7 +32,7 @@ pub fn load() -> Option<Config> {
 /// Reads the config, creating it (with a fresh random token) on first run.
 pub fn load_or_create() -> Config {
     load().unwrap_or_else(|| {
-        let config = Config { token: random_token(), fence: true };
+        let config = Config { token: random_token(), fence: true, mode: DisplayMode::DEFAULT };
         save(&config);
         config
     })

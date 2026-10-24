@@ -18,6 +18,8 @@ const statusText = $("#status-text");
 const statusDetail = $("#status-detail");
 const detailLine = $("#detail-line");
 const peekButton = $<HTMLButtonElement>("#btn-peek");
+const resolutionRow = $("#resolution-row");
+const resolution = $<HTMLSelectElement>("#resolution");
 const powerActions = $("#power-actions");
 const installButton = $<HTMLButtonElement>("#btn-install");
 const retryButton = $<HTMLButtonElement>("#btn-retry");
@@ -27,6 +29,10 @@ const manualButton = $<HTMLButtonElement>("#btn-manual");
 const toast = $("#toast");
 
 let current: Status | undefined;
+/** Set while a resolution change is on its way, so status refreshes don't snap the menu back. */
+let changingResolution = false;
+
+const modeKey = (mode: { width: number; height: number }) => `${mode.width}x${mode.height}`;
 
 const ERROR_TEXT: Record<ErrorCode, [title: string, detail?: string]> = {
   driverMissing: ["errors.driverMissing", "errors.driverMissingDetail"],
@@ -76,6 +82,15 @@ function render(status: Status): void {
   statusDetail.textContent = detail;
   peekButton.hidden = power.kind !== "on";
   detailLine.hidden = detail === "" && peekButton.hidden;
+
+  resolutionRow.hidden = power.kind === "error";
+  if (resolution.options.length !== status.modes.length) {
+    resolution.replaceChildren(
+      ...status.modes.map((mode) => new Option(t("display.mode", { ...mode }), modeKey(mode))),
+    );
+  }
+  if (!changingResolution) resolution.value = modeKey(status.mode);
+  resolution.disabled = busy || changingResolution;
 
   installButton.disabled = status.installing;
   installButton.textContent = t(status.installing ? "actions.installing" : "actions.installDriver");
@@ -170,6 +185,17 @@ powerSwitch.addEventListener("click", async () => {
   const turnOn = !(current.power.kind === "on");
   const status = await run<Status>("set_power", { on: turnOn });
   if (status) render(status);
+});
+
+resolution.addEventListener("change", async () => {
+  const [width, height] = resolution.value.split("x").map(Number);
+  changingResolution = true;
+  resolution.disabled = true;
+  const status = await run<Status>("set_resolution", { width, height });
+  changingResolution = false;
+  if (status?.power.kind === "on") showToast(t("display.changed", { width, height }));
+  // On failure the toast already says why; the menu goes back to what is really set.
+  render(status ?? (await invoke<Status>("status")));
 });
 
 installButton.addEventListener("click", async () => {

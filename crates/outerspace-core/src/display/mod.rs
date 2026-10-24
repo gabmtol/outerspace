@@ -5,9 +5,9 @@
 pub mod layout;
 pub mod parsec;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DisplayMode {
     pub width: u32,
     pub height: u32,
@@ -16,6 +16,12 @@ pub struct DisplayMode {
 
 impl DisplayMode {
     pub const DEFAULT: DisplayMode = DisplayMode { width: 1920, height: 1080, hz: 60 };
+}
+
+impl Default for DisplayMode {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 /// Where the virtual display ended up on the Windows desktop.
@@ -68,6 +74,12 @@ pub trait VirtualDisplayBackend: Send {
     /// Plugs in one virtual display and arranges it next to the user's monitors. Blocks until
     /// Windows reports it attached to the desktop.
     fn connect(&mut self, mode: DisplayMode) -> Result<DisplayInfo, DisplayError>;
+
+    /// The modes offered to the user, smallest first.
+    fn modes(&self) -> Vec<DisplayMode>;
+
+    /// Switches the connected display to `mode`, keeping it next to the user's monitors.
+    fn set_mode(&mut self, mode: DisplayMode) -> Result<DisplayInfo, DisplayError>;
 
     /// Unplugs the display. Idempotent.
     fn disconnect(&mut self);
