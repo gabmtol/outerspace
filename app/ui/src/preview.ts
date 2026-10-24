@@ -6,7 +6,7 @@ const params = new URLSearchParams(location.search);
 
 // Stand-in for the blurred desktop that the OS acrylic shows behind the window, at the window's real size.
 document.documentElement.style.background = "linear-gradient(160deg, #7a8fb8 0%, #c98a7a 55%, #e7b07c 100%)";
-Object.assign(document.body.style, { width: "380px", height: "540px", position: "relative" });
+Object.assign(document.body.style, { width: "380px", height: "460px", position: "relative" });
 
 function power(): PowerState {
   switch (params.get("state")) {

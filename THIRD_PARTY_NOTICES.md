@@ -30,6 +30,13 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 ```
 
+## Inter
+
+The UI bundles the Inter typeface (variable, optical-size axis; Latin subsets) from
+[`@fontsource-variable/inter`](https://fontsource.org/fonts/inter), by Rasmus Andersson —
+https://github.com/rsms/inter. Licensed under the SIL Open Font License 1.1:
+https://openfontlicense.org.
+
 ## Parsec Virtual Display Driver
 
 The driver is Parsec's signed binary. OuterSpace does not bundle it: when the user asks, it

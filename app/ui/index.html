@@ -4,33 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OuterSpace</title>
+  <link rel="stylesheet" href="./src/fonts.css">
   <link rel="stylesheet" href="./src/tokens.css">
   <link rel="stylesheet" href="./src/glass.css">
 </head>
 <body>
-  <div class="ambient" aria-hidden="true"><span class="blob warm"></span><span class="blob cool"></span></div>
-
   <div class="window">
     <header class="titlebar" data-tauri-drag-region>
-      <div class="brand" data-tauri-drag-region>
-        <img class="brand-icon" src="/icon.svg" alt="" data-tauri-drag-region>
-        <span data-i18n="app.name" data-tauri-drag-region></span>
-      </div>
-      <div class="controls">
-        <button class="ctl" id="btn-minimize" data-i18n-title="window.minimize">
-          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 5h7"/></svg>
+      <div class="lights">
+        <button class="light close" id="btn-close" data-i18n-title="window.close">
+          <svg viewBox="0 0 8 8" aria-hidden="true"><path d="M2 2l4 4M6 2l-4 4"/></svg>
         </button>
-        <button class="ctl" id="btn-close" data-i18n-title="window.close">
-          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6"/></svg>
+        <button class="light minimize" id="btn-minimize" data-i18n-title="window.minimize">
+          <svg viewBox="0 0 8 8" aria-hidden="true"><path d="M1.5 4h5"/></svg>
         </button>
+        <!-- The window has a fixed size, so zoom is shown disabled, as macOS does. -->
+        <span class="light zoom" aria-hidden="true"></span>
       </div>
+      <div class="title" data-i18n="app.name"></div>
     </header>
 
     <main>
       <section class="card power" id="power" data-state="off">
         <div class="power-row">
           <div class="power-text">
-            <h1 class="title" data-i18n="power.title"></h1>
+            <h1 class="heading" data-i18n="power.title"></h1>
             <p class="status"><span class="dot" aria-hidden="true"></span><span id="status-text"></span></p>
           </div>
           <button class="switch" id="power-switch" role="switch" aria-checked="false" data-i18n-title="power.toggle">

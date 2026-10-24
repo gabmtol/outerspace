@@ -1,68 +1,77 @@
-/* Liquid Glass · Golden Gate design tokens (docs/PLANO.md §6.3) */
+/* Design tokens: macOS system colors and type over a Liquid Glass window (docs/PLANO.md §6.3).
+   Flat surfaces — no drop shadows, no gradients; depth comes from the glass and hairlines.
+   Text colors are tuned to keep ≥4.5:1 even in the worst case (a light theme over a dark wallpaper
+   and vice versa); that is why links and the accent fill are a shade deeper than macOS' own. */
 :root {
   color-scheme: light dark;
 
   --radius-window: 12px;
-  --radius-card: 16px;
-  --radius-control: 10px;
-  --radius-pill: 999px;
+  --radius-card: 12px;
+  --radius-control: 999px; /* Liquid Glass buttons are capsules */
 
   --blur-glass: 24px;
   --saturate-glass: 160%;
 
-  --accent: #e8792b;
-  --accent-soft: #f4b183;
-  --accent-ink: #7a3a0f;
-  --accent-gradient: linear-gradient(180deg, #ffb86e 0%, #ff7b32 55%, #e0502a 100%);
+  --font: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --fs-title: 600 15px/20px var(--font);
+  --fs-body: 400 13px/18px var(--font);
+  --fs-caption: 400 11px/14px var(--font);
+  --fs-label: 600 12px/16px var(--font);
 
-  --state-on: #d9a441;
+  --motion: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Accent: macOS system blue, deep enough for white text (4.7:1). */
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --accent-pressed: #0068d1;
+
+  /* Status dots: macOS system colors. */
+  --state-on: #34c759;
+  --state-busy: #ff9500;
   --state-off: #8e8e93;
-  --state-error: #e5484d;
+  --state-error: #ff3b30;
 
-  --font: "Segoe UI Variable Text", "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Segoe UI Variable Display", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
-  --fs-title: 600 17px/22px var(--font-display);
-  --fs-body: 400 14px/20px var(--font);
-  --fs-caption: 400 12px/16px var(--font);
-  --fs-label: 600 11px/14px var(--font);
+  /* Traffic lights. */
+  --light-close: #ff5f57;
+  --light-minimize: #febc2e;
+  --light-disabled: rgba(0, 0, 0, 0.12);
+  --light-ring: rgba(0, 0, 0, 0.12);
+  --light-glyph: rgba(0, 0, 0, 0.55);
 
-  --motion: 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  --motion-spring: 220ms cubic-bezier(0.3, 1.35, 0.5, 1);
-
-  /* light — tint and secondary text tuned so secondary text keeps ≥4.5:1 even over a dark wallpaper */
-  --window-tint: rgba(250, 247, 252, 0.8);
-  --window-tint-solid: #f4f1f6;
-  --glass-fill: rgba(255, 255, 255, 0.52);
-  --glass-stroke-top: rgba(255, 255, 255, 0.85);
-  --glass-stroke-bottom: rgba(0, 0, 0, 0.06);
-  --glass-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 42%);
-  --hairline: rgba(28, 28, 30, 0.08);
-  --control-fill: rgba(255, 255, 255, 0.62);
-  --control-fill-hover: rgba(255, 255, 255, 0.9);
-  --track-off: rgba(120, 120, 128, 0.22);
-  --text-primary: #1c1c1e;
-  --text-secondary: rgba(28, 28, 30, 0.7);
-  --shadow-card: 0 8px 24px rgba(40, 20, 10, 0.08), 0 1px 2px rgba(40, 20, 10, 0.06);
-  --blob-warm: rgba(255, 140, 70, 0.42);
-  --blob-cool: rgba(120, 110, 255, 0.26);
+  /* light */
+  --window-tint: rgba(246, 246, 246, 0.88);
+  --window-tint-solid: #f6f6f6;
+  --group-fill: rgba(255, 255, 255, 0.62);
+  --hairline: rgba(0, 0, 0, 0.08);
+  --control-fill: rgba(0, 0, 0, 0.06);
+  --control-fill-hover: rgba(0, 0, 0, 0.1);
+  --track-off: rgba(0, 0, 0, 0.1);
+  --hud: rgba(255, 255, 255, 0.9);
+  --text-primary: rgba(0, 0, 0, 0.85);
+  --text-secondary: rgba(0, 0, 0, 0.6);
+  --link: #0058b0;
+  --positive: #17692c;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --window-tint: rgba(22, 20, 30, 0.76);
-    --window-tint-solid: #1b1924;
-    --glass-fill: rgba(40, 38, 52, 0.48);
-    --glass-stroke-top: rgba(255, 255, 255, 0.14);
-    --glass-stroke-bottom: rgba(0, 0, 0, 0.45);
-    --glass-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 42%);
-    --hairline: rgba(255, 255, 255, 0.08);
-    --control-fill: rgba(255, 255, 255, 0.08);
-    --control-fill-hover: rgba(255, 255, 255, 0.16);
-    --track-off: rgba(120, 120, 128, 0.36);
-    --text-primary: #f2f2f7;
-    --text-secondary: rgba(242, 242, 247, 0.72);
-    --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.3);
-    --blob-warm: rgba(255, 120, 50, 0.3);
-    --blob-cool: rgba(110, 90, 255, 0.24);
+    --state-on: #30d158;
+    --state-busy: #ff9f0a;
+    --state-error: #ff453a;
+    --light-disabled: rgba(255, 255, 255, 0.16);
+    --light-ring: rgba(0, 0, 0, 0.3);
+
+    --window-tint: rgba(30, 30, 32, 0.86);
+    --window-tint-solid: #1e1e1e;
+    --group-fill: rgba(255, 255, 255, 0.06);
+    --hairline: rgba(255, 255, 255, 0.1);
+    --control-fill: rgba(255, 255, 255, 0.12);
+    --control-fill-hover: rgba(255, 255, 255, 0.18);
+    --track-off: rgba(255, 255, 255, 0.16);
+    --hud: rgba(44, 44, 46, 0.9);
+    --text-primary: rgba(255, 255, 255, 0.88);
+    --text-secondary: rgba(255, 255, 255, 0.66);
+    --link: #7dbdff;
+    --positive: #5ee37a;
   }
 }

@@ -4,7 +4,7 @@
   },
   "window": {
     "minimize": "Minimize",
-    "close": "Hide to tray"
+    "close": "Close (OuterSpace keeps running in the tray)"
   },
   "power": {
     "title": "Virtual display",
