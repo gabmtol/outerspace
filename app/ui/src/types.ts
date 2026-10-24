@@ -35,6 +35,8 @@ export interface ClientSnippet {
   id: "claude" | "codex" | "opencode";
   name: string;
   monogram: string;
+  /// "outdated": configured, but for another copy of outerspace-mcp.exe.
+  state: "notConfigured" | "configured" | "outdated";
   command: string;
   configPath: string;
   config: string;

@@ -1,6 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod clients;
 mod commands;
 mod i18n;
 mod tray;
@@ -34,6 +33,7 @@ fn main() {
             commands::install_driver,
             commands::set_autostart,
             commands::client_snippets,
+            commands::add_client,
             commands::open_logs,
         ])
         .setup(|app| {

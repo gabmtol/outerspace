@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use outerspace_core::setup::{self, Client, ClientInfo};
 use outerspace_core::{MCP_PORT, PowerController, PowerState, paths, system};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
-use crate::clients::{self, ClientSnippet};
 use crate::tray;
 
 pub struct AppState {
@@ -89,8 +89,27 @@ pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<Status, String> {
 }
 
 #[tauri::command]
-pub fn client_snippets() -> Vec<ClientSnippet> {
-    clients::snippets()
+pub async fn client_snippets() -> Result<Vec<ClientInfo>, String> {
+    // Reads three config files; keep it off the UI thread.
+    tauri::async_runtime::spawn_blocking(clients).await.map_err(|e| e.to_string())
+}
+
+/// Adds OuterSpace to one client's config. Returns what was done and the refreshed list.
+#[tauri::command]
+pub async fn add_client(id: String) -> Result<(String, Vec<ClientInfo>), String> {
+    let client = Client::parse(&id).ok_or_else(|| format!("unknown client {id}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let done = setup::add(client, &setup::shim_path()).map_err(|e| e.to_string());
+        tracing::info!(client = id, ok = done.is_ok(), "add client");
+        done.map(|message| (message, clients()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn clients() -> Vec<ClientInfo> {
+    let shim = setup::shim_path();
+    Client::ALL.into_iter().map(|client| setup::describe(client, &shim)).collect()
 }
 
 #[tauri::command]

@@ -35,10 +35,15 @@
   "clients": {
     "section": "Connect an agent",
     "add": "Add",
+    "adding": "Adding…",
+    "update": "Update",
     "copy": "Copy",
     "copied": "Copied",
-    "configured": "Configured",
-    "addSoon": "One-click setup arrives in a later build. Use Copy for now."
+    "configured": "Configured ✓",
+    "addTitle": "Add OuterSpace to {name}",
+    "updateTitle": "{name} points at another copy of OuterSpace. Update it to this one.",
+    "configuredTitle": "{name} already uses OuterSpace. Restart {name} if it was open.",
+    "added": "{message}. Restart {name} if it is open."
   },
   "server": {
     "caption": "Server 127.0.0.1:{port} · stdio via shim",

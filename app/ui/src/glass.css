@@ -111,6 +111,8 @@ main { flex: 1; padding: 4px 16px 0; display: flex; flex-direction: column; min-
 .btn.primary { background: var(--accent-gradient); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 8px rgba(224, 80, 42, 0.3); }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.06); background: var(--accent-gradient); }
 .btn.subtle { background: transparent; box-shadow: none; color: var(--text-secondary); }
+.btn.done { background: transparent; box-shadow: none; color: var(--state-on); cursor: default; }
+.btn.done:hover { background: transparent; }
 .btn.sm { height: 26px; padding: 0 11px; font-size: 12px; }
 
 .link {

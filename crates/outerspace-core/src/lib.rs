@@ -9,6 +9,7 @@ pub mod geom;
 pub mod input;
 pub mod paths;
 pub mod power;
+pub mod setup;
 pub mod system;
 
 pub use display::{DisplayInfo, DisplayMode, DriverStatus};

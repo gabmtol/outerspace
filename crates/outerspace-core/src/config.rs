@@ -12,10 +12,16 @@ pub struct Config {
     pub token: String,
 }
 
+/// Reads the config without creating anything (the stdio shim uses this; the app owns the file).
+pub fn load() -> Option<Config> {
+    let path = paths::data_dir().join("config.json");
+    std::fs::read(path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok())
+}
+
 /// Reads the config, creating it (with a fresh random token) on first run.
 pub fn load_or_create() -> Config {
     let path = paths::data_dir().join("config.json");
-    if let Some(config) = std::fs::read(&path).ok().and_then(|bytes| serde_json::from_slice::<Config>(&bytes).ok()) {
+    if let Some(config) = load() {
         return config;
     }
     let config = Config { token: random_token() };

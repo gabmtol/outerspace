@@ -24,9 +24,9 @@ function power(): PowerState {
 const shim = "C:\\Users\\you\\AppData\\Local\\Programs\\OuterSpace\\outerspace-mcp.exe";
 
 const snippets: ClientSnippet[] = [
-  { id: "claude", name: "Claude Code", monogram: "CC", command: `claude mcp add --transport stdio --scope user outerspace -- "${shim}"`, configPath: "~/.claude.json", config: "{}" },
-  { id: "codex", name: "Codex CLI", monogram: "CX", command: `codex mcp add outerspace -- "${shim}"`, configPath: "~/.codex/config.toml", config: "" },
-  { id: "opencode", name: "OpenCode", monogram: "OC", command: "", configPath: "~/.config/opencode/opencode.json", config: "{}" },
+  { id: "claude", name: "Claude Code", monogram: "CC", state: "configured", command: `claude mcp add --transport stdio --scope user outerspace -- "${shim}"`, configPath: "~/.claude.json", config: "{}" },
+  { id: "codex", name: "Codex CLI", monogram: "CX", state: "outdated", command: `codex mcp add outerspace -- "${shim}"`, configPath: "~/.codex/config.toml", config: "" },
+  { id: "opencode", name: "OpenCode", monogram: "OC", state: "notConfigured", command: "", configPath: "~/.config/opencode/opencode.json", config: "{}" },
 ];
 
 const status: Status = { power: power(), installing: false, port: 7342, version: "0.1.0", autostart: false, transparency: true };

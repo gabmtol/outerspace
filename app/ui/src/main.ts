@@ -104,9 +104,26 @@ function renderClients(snippets: ClientSnippet[]): void {
     row.querySelector(".client-icon")!.textContent = snippet.monogram;
     row.querySelector(".client-name")!.textContent = snippet.name;
     const add = row.querySelector<HTMLButtonElement>(".add")!;
-    add.textContent = t("clients.add");
-    add.disabled = true;
-    add.title = t("clients.addSoon");
+    const vars = { name: snippet.name };
+    if (snippet.state === "configured") {
+      add.textContent = t("clients.configured");
+      add.classList.replace("primary", "done");
+      add.title = t("clients.configuredTitle", vars);
+    } else {
+      add.textContent = t(snippet.state === "outdated" ? "clients.update" : "clients.add");
+      add.title = t(snippet.state === "outdated" ? "clients.updateTitle" : "clients.addTitle", vars);
+      add.addEventListener("click", async () => {
+        add.disabled = true;
+        add.textContent = t("clients.adding");
+        const result = await run<[string, ClientSnippet[]]>("add_client", { id: snippet.id });
+        if (result) {
+          showToast(t("clients.added", { message: result[0], name: snippet.name }));
+          renderClients(result[1]);
+        } else {
+          renderClients(snippets);
+        }
+      });
+    }
     const copyButton = row.querySelector<HTMLButtonElement>(".copy")!;
     copyButton.textContent = t("clients.copy");
     copyButton.addEventListener("click", () => copy(snippet.command, copyButton));
