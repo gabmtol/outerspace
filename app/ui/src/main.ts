@@ -194,7 +194,8 @@ for (const id of ["#btn-logs", "#btn-log"]) $(id).addEventListener("click", () =
 if (inTauri) {
   const appWindow = getCurrentWindow();
   $("#btn-minimize").addEventListener("click", () => appWindow.minimize());
-  $("#btn-close").addEventListener("click", () => appWindow.hide());
+  // Closing frees the WebView; the app stays in the tray and reopens the window on demand.
+  $("#btn-close").addEventListener("click", () => appWindow.close());
   await listen<Status>("status", (event) => render(event.payload));
 }
 

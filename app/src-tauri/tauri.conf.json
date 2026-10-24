@@ -13,6 +13,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "OuterSpace",
         "width": 380,
         "height": 540,

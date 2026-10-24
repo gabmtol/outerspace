@@ -3,7 +3,7 @@ use outerspace_core::{PowerState, config};
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, PhysicalPosition, Rect, WebviewWindow, Wry};
+use tauri::{AppHandle, Manager, PhysicalPosition, Rect, WebviewWindow, WebviewWindowBuilder, Wry};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::commands::{self, AppState};
@@ -47,10 +47,26 @@ pub fn refresh(app: &AppHandle) {
 }
 
 pub fn show_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = main_window(app) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+/// The window exists only while it is open: closing destroys it (the app lives on in the tray).
+/// A hidden WebView2 still holds ~180 MB across its processes; the tray app alone needs ~45 MB.
+fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
+    if let Some(window) = app.get_webview_window("main") {
+        return Some(window);
+    }
+    let config = app.config().app.windows.iter().find(|w| w.label == "main")?;
+    match WebviewWindowBuilder::from_config(app, config).and_then(|builder| builder.build()) {
+        Ok(window) => Some(window),
+        Err(err) => {
+            tracing::warn!(%err, "could not create the window");
+            None
+        }
     }
 }
 
@@ -119,13 +135,16 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
     }
 }
 
-/// Left click on the tray icon: open the window right above the icon, or hide it if it is showing.
+/// Left click on the tray icon: open the window right above the icon, or close it if it is showing.
 fn toggle_window(app: &AppHandle, tray: Rect) {
-    let Some(window) = app.get_webview_window("main") else { return };
-    if window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false) {
-        let _ = window.hide();
+    if let Some(window) = app.get_webview_window("main")
+        && window.is_visible().unwrap_or(false)
+        && !window.is_minimized().unwrap_or(false)
+    {
+        let _ = window.close();
         return;
     }
+    let Some(window) = main_window(app) else { return };
     if let Some(position) = position_near(&window, tray) {
         let _ = window.set_position(position);
     }

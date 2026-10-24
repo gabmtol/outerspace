@@ -11,7 +11,7 @@ use outerspace_core::display::parsec::ParsecVdd;
 use outerspace_core::input::fence::Fence;
 use outerspace_core::{MCP_PORT, PowerController, PowerState, config, paths};
 use outerspace_mcp::CancellationToken;
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::{Manager, RunEvent};
 use tracing_subscriber::EnvFilter;
 
 /// Passed by the "Start with Windows" entry: start in the tray without showing the window.
@@ -70,18 +70,15 @@ fn main() {
             }
             Ok(())
         })
-        .on_window_event(|window, event| {
-            // Closing the window only hides it; the app keeps living in the tray.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
-            }
-        })
         .build(tauri::generate_context!())
         .expect("failed to build the OuterSpace app");
 
     app.run(|app, event| {
-        if let RunEvent::Exit = event {
+        // Closing the window destroys it (see tray::main_window); the app keeps living in the tray
+        // until "Quit", which exits with an explicit code.
+        if let RunEvent::ExitRequested { api, code: None, .. } = event {
+            api.prevent_exit();
+        } else if let RunEvent::Exit = event {
             let state = app.state::<commands::AppState>();
             state.mcp_stop.cancel();
             // Unplug cleanly; the driver would also drop the display ~1 s after the pings stop.
