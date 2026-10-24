@@ -47,19 +47,32 @@ pub fn refresh(app: &AppHandle) {
 }
 
 pub fn show_window(app: &AppHandle) {
-    if let Some(window) = main_window(app) {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    with_main_window(app, |window| reveal(&window));
 }
 
-/// The window exists only while it is open: closing destroys it (the app lives on in the tray).
-/// A hidden WebView2 still holds ~180 MB across its processes; the tray app alone needs ~45 MB.
-fn main_window(app: &AppHandle) -> Option<WebviewWindow> {
+pub fn reveal(window: &WebviewWindow) {
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Runs `then` with the main window, creating it first if needed. The window exists only while it
+/// is open: closing destroys it (a hidden WebView2 still holds ~180 MB across its processes; the
+/// tray app alone needs ~45 MB). Creation happens on the async runtime: on Windows, building a
+/// WebView2 window from an event handler or a synchronous command deadlocks the app.
+fn with_main_window(app: &AppHandle, then: impl FnOnce(WebviewWindow) + Send + 'static) {
     if let Some(window) = app.get_webview_window("main") {
-        return Some(window);
+        return then(window);
     }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Some(window) = create_main_window(&app) {
+            then(window);
+        }
+    });
+}
+
+fn create_main_window(app: &AppHandle) -> Option<WebviewWindow> {
     let config = app.config().app.windows.iter().find(|w| w.label == "main")?;
     match WebviewWindowBuilder::from_config(app, config).and_then(|builder| builder.build()) {
         Ok(window) => Some(window),
@@ -146,11 +159,12 @@ fn toggle_window(app: &AppHandle, tray: Rect) {
         let _ = window.close();
         return;
     }
-    let Some(window) = main_window(app) else { return };
-    if let Some(position) = position_near(&window, tray) {
-        let _ = window.set_position(position);
-    }
-    show_window(app);
+    with_main_window(app, move |window| {
+        if let Some(position) = position_near(&window, tray) {
+            let _ = window.set_position(position);
+        }
+        reveal(&window);
+    });
 }
 
 fn position_near(window: &WebviewWindow, tray: Rect) -> Option<PhysicalPosition<i32>> {

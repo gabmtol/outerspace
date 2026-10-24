@@ -12,24 +12,27 @@ use crate::commands::AppState;
 pub const LABEL: &str = "peek";
 pub const SCHEME: &str = "peek";
 
+/// Shows the peek window, creating it on the async runtime if needed: on Windows, building a
+/// WebView2 window from an event handler or a synchronous command deadlocks the app.
 pub fn open(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(LABEL) {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-        return;
+        return crate::tray::reveal(&window);
     }
-    let built = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("peek.html".into()))
-        .title("OuterSpace — Virtual display")
-        .inner_size(800.0, 490.0)
-        .min_inner_size(400.0, 265.0)
-        .decorations(false)
-        .shadow(true)
-        .center()
-        .build();
-    if let Err(err) = built {
-        tracing::warn!(%err, "could not open the peek window");
-    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let built = WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("peek.html".into()))
+            .title("OuterSpace — Virtual display")
+            .inner_size(800.0, 490.0)
+            .min_inner_size(400.0, 265.0)
+            .decorations(false)
+            .shadow(true)
+            .center()
+            .build();
+        match built {
+            Ok(window) => crate::tray::reveal(&window),
+            Err(err) => tracing::warn!(%err, "could not open the peek window"),
+        }
+    });
 }
 
 /// `peek://localhost/frame?w=<pixels>`: the virtual display as a JPEG scaled to that width, or
@@ -49,12 +52,16 @@ fn frame(app: &AppHandle, width: u32) -> Response<Vec<u8>> {
     let PowerState::On { display } = app.state::<AppState>().power.state() else {
         return empty(StatusCode::NO_CONTENT);
     };
-    let area = display.rect();
-    let scale = (width as f32 / area.w as f32).clamp(0.1, 1.0);
-    match capture::grab(area).and_then(|image| capture::encode(&image, scale, Format::Jpeg)) {
+    // Scaled while copying, not after: a live view at ~8 fps must stay cheap.
+    match capture::grab_scaled(display.rect(), width as i32)
+        .and_then(|image| capture::encode(&image, 1.0, Format::Jpeg))
+    {
         Ok(shot) => Response::builder()
             .header("Content-Type", shot.mime)
             .header("Cache-Control", "no-store")
+            // The page lives on another origin (tauri.localhost, or the dev server) than peek.localhost.
+            // Only the app's own webviews can reach this protocol, so any origin is fine.
+            .header("Access-Control-Allow-Origin", "*")
             .body(shot.bytes)
             .unwrap_or_else(|_| empty(StatusCode::INTERNAL_SERVER_ERROR)),
         Err(err) => {
@@ -65,7 +72,5 @@ fn frame(app: &AppHandle, width: u32) -> Response<Vec<u8>> {
 }
 
 fn empty(status: StatusCode) -> Response<Vec<u8>> {
-    let mut response = Response::new(Vec::new());
-    *response.status_mut() = status;
-    response
+    Response::builder().status(status).header("Access-Control-Allow-Origin", "*").body(Vec::new()).unwrap_or_default()
 }

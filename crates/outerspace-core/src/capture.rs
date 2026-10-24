@@ -10,7 +10,8 @@ use image::imageops::FilterType;
 use image::{ExtendedColorType, ImageEncoder, RgbImage};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC,
-    DeleteObject, GetDC, GetDIBits, ReleaseDC, SRCCOPY, SelectObject,
+    DeleteObject, GetDC, GetDIBits, HALFTONE, ReleaseDC, SRCCOPY, SelectObject, SetBrushOrgEx, SetStretchBltMode,
+    StretchBlt,
 };
 
 use crate::geom::Rect;
@@ -33,26 +34,42 @@ pub struct Screenshot {
 #[error("screenshot failed: {0}")]
 pub struct CaptureError(String);
 
-/// Copies `area` (desktop coordinates) off the screen.
+/// Copies `area` (desktop coordinates) off the screen at full resolution.
 pub fn grab(area: Rect) -> Result<RgbImage, CaptureError> {
+    grab_scaled(area, area.w)
+}
+
+/// Copies `area` scaled down to `width` (aspect kept) in the same GDI call, which is far cheaper than
+/// copying at full size and resizing on the CPU — for live views. Agents' screenshots go through
+/// [`grab`] + [`encode`], whose resampling keeps small text crisper.
+pub fn grab_scaled(area: Rect, width: i32) -> Result<RgbImage, CaptureError> {
     if area.w <= 0 || area.h <= 0 {
         return Err(CaptureError(format!("empty area {area:?}")));
     }
+    let width = width.clamp(1, area.w);
+    let height = ((area.h as i64 * width as i64) / area.w as i64).max(1) as i32;
     dpi_aware();
-    let mut bgra = vec![0u8; area.w as usize * area.h as usize * 4];
+    let mut bgra = vec![0u8; width as usize * height as usize * 4];
     unsafe {
         let screen = GetDC(None);
         let memory = CreateCompatibleDC(Some(screen));
-        let bitmap = CreateCompatibleBitmap(screen, area.w, area.h);
+        let bitmap = CreateCompatibleBitmap(screen, width, height);
         let previous = SelectObject(memory, bitmap.into());
-        let copied = BitBlt(memory, 0, 0, area.w, area.h, Some(screen), area.x, area.y, SRCCOPY);
+        let copied = if width == area.w {
+            BitBlt(memory, 0, 0, width, height, Some(screen), area.x, area.y, SRCCOPY)
+        } else {
+            // HALFTONE averages the source pixels instead of dropping them.
+            SetStretchBltMode(memory, HALFTONE);
+            let _ = SetBrushOrgEx(memory, 0, 0, None);
+            StretchBlt(memory, 0, 0, width, height, Some(screen), area.x, area.y, area.w, area.h, SRCCOPY).ok()
+        };
         // GetDIBits wants the bitmap out of any DC.
         SelectObject(memory, previous);
         let mut info = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: area.w,
-                biHeight: -area.h, // negative: rows top to bottom
+                biWidth: width,
+                biHeight: -height, // negative: rows top to bottom
                 biPlanes: 1,
                 biBitCount: 32,
                 biCompression: BI_RGB.0,
@@ -61,17 +78,17 @@ pub fn grab(area: Rect) -> Result<RgbImage, CaptureError> {
             ..Default::default()
         };
         let lines =
-            GetDIBits(memory, bitmap, 0, area.h as u32, Some(bgra.as_mut_ptr().cast()), &mut info, DIB_RGB_COLORS);
+            GetDIBits(memory, bitmap, 0, height as u32, Some(bgra.as_mut_ptr().cast()), &mut info, DIB_RGB_COLORS);
         let _ = DeleteObject(bitmap.into());
         let _ = DeleteDC(memory);
         ReleaseDC(None, screen);
         copied.map_err(|e| CaptureError(e.message()))?;
-        if lines != area.h {
+        if lines != height {
             return Err(CaptureError("could not read the captured pixels".into()));
         }
     }
     let rgb: Vec<u8> = bgra.as_chunks::<4>().0.iter().flat_map(|&[b, g, r, _]| [r, g, b]).collect();
-    RgbImage::from_raw(area.w as u32, area.h as u32, rgb).ok_or_else(|| CaptureError("bad pixel buffer".into()))
+    RgbImage::from_raw(width as u32, height as u32, rgb).ok_or_else(|| CaptureError("bad pixel buffer".into()))
 }
 
 /// Scales by `scale` (0.1–1) and encodes. PNG for crisp text, JPEG (quality 80) when size matters.

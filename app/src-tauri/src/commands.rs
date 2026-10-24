@@ -123,9 +123,12 @@ fn clients() -> Vec<ClientInfo> {
     Client::ALL.into_iter().map(|client| setup::describe(client, &shim)).collect()
 }
 
+/// Async on purpose: on Windows, building a WebView2 window from a synchronous command deadlocks
+/// (the command runs on the main thread, which the new webview needs).
 #[tauri::command]
-pub fn open_peek(app: AppHandle) {
+pub async fn open_peek(app: AppHandle) -> Result<(), String> {
     crate::peek::open(&app);
+    Ok(())
 }
 
 #[tauri::command]

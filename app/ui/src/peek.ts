@@ -7,7 +7,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { applyI18n, t } from "./i18n";
 import type { Status } from "./types";
 
-const FRAME_INTERVAL_MS = 120; // ~8 fps
+// Plus ~40 ms to capture: ~5 fps. Each GDI screen copy has a fixed cost, so this is the CPU knob.
+const FRAME_INTERVAL_MS = 160;
 const OFF_RETRY_MS = 1000;
 
 const frame = document.querySelector<HTMLImageElement>("#frame")!;
