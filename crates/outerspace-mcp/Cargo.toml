@@ -1,0 +1,18 @@
+[package]
+name = "outerspace-mcp"
+description = "OuterSpace MCP server: the tools agents use to work on the virtual display"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+outerspace-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+axum = "0.8.9"
+base64 = "0.23.1"
+rmcp = { version = "3.7.0", features = ["server", "macros", "transport-streamable-http-server"] }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net", "sync"] }
+tokio-util = "0.7"

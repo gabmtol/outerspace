@@ -9,7 +9,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use outerspace_core::display::parsec::ParsecVdd;
-use outerspace_core::{PowerController, paths};
+use outerspace_core::{MCP_PORT, PowerController, config, paths};
+use outerspace_mcp::CancellationToken;
 use tauri::{Manager, RunEvent, WindowEvent};
 use tracing_subscriber::EnvFilter;
 
@@ -36,11 +37,26 @@ fn main() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
-            let power = PowerController::new(Box::new(ParsecVdd::new()), move |_| commands::publish(&handle));
-            app.manage(commands::AppState { power: Arc::new(power), installing: AtomicBool::new(false) });
+            let power = Arc::new(PowerController::new(Box::new(ParsecVdd::new()), move |_| commands::publish(&handle)));
+            let mcp_stop = CancellationToken::new();
+            tauri::async_runtime::spawn({
+                let (power, stop) = (power.clone(), mcp_stop.clone());
+                let token = config::load_or_create().token;
+                async move {
+                    if let Err(err) = outerspace_mcp::run(power, MCP_PORT, token, stop).await {
+                        tracing::error!(%err, port = MCP_PORT, "MCP server could not run");
+                    }
+                }
+            });
+            app.manage(commands::AppState { power, installing: AtomicBool::new(false), mcp_stop });
             tray::create(app.handle())?;
             if !std::env::args().any(|arg| arg == HIDDEN_ARG) {
                 tray::show_window(app.handle());
+            }
+            // Dev builds only: lets the hardware tests restart the app without a human at the switch.
+            if cfg!(debug_assertions) && std::env::var_os("OUTERSPACE_DEV_AUTO_ON").is_some() {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move { commands::switch_power(&handle, true).await });
             }
             Ok(())
         })
@@ -56,8 +72,10 @@ fn main() {
 
     app.run(|app, event| {
         if let RunEvent::Exit = event {
+            let state = app.state::<commands::AppState>();
+            state.mcp_stop.cancel();
             // Unplug cleanly; the driver would also drop the display ~1 s after the pings stop.
-            app.state::<commands::AppState>().power.turn_off();
+            state.power.turn_off();
             tracing::info!("OuterSpace exiting");
         }
     });

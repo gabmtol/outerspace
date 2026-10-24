@@ -12,6 +12,8 @@ use crate::tray;
 pub struct AppState {
     pub power: Arc<PowerController>,
     pub installing: AtomicBool,
+    /// Stops the MCP server on exit.
+    pub mcp_stop: outerspace_mcp::CancellationToken,
 }
 
 /// Everything the UI renders. Mirrored by `Status` in app/ui/src/types.ts.

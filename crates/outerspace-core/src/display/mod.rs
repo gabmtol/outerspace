@@ -32,6 +32,12 @@ pub struct DisplayInfo {
     pub device_name: String,
 }
 
+impl DisplayInfo {
+    pub fn rect(&self) -> crate::Rect {
+        crate::Rect::new(self.x, self.y, self.width as i32, self.height as i32)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DriverStatus {
     Ready,

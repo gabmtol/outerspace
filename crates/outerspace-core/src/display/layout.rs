@@ -190,6 +190,13 @@ fn from_wide(chars: &[u16]) -> String {
     String::from_utf16_lossy(&chars[..len])
 }
 
+/// Desktop rectangle of the output driving the monitor whose device ID contains `monitor_id`.
+#[cfg(test)]
+pub(crate) fn rect_of_monitor(monitor_id: &str) -> Option<crate::Rect> {
+    let output = outputs().into_iter().find(|o| o.attached && o.monitors.iter().any(|m| m.contains(monitor_id)))?;
+    current(&output.name).map(|r| crate::Rect::new(r.x, r.y, r.width as i32, r.height as i32))
+}
+
 /// Whether a monitor whose device ID contains `monitor_id` is active on any output.
 #[cfg(test)]
 pub(crate) fn monitor_active(monitor_id: &str) -> bool {

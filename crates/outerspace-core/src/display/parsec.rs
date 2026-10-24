@@ -376,6 +376,12 @@ fn download(url: &str, to: &Path) -> Result<(), DisplayError> {
     }
 }
 
+/// Where a Parsec display that is already plugged in (e.g. by the running app) sits on the desktop.
+#[cfg(test)]
+pub(crate) fn plugged_display() -> Option<crate::Rect> {
+    layout::rect_of_monitor(MONITOR_ID)
+}
+
 /// Runs `exe` through the UAC prompt and waits for it. Returns the process exit code.
 fn run_elevated(exe: &Path, args: &str) -> Result<u32, DisplayError> {
     let file = HSTRING::from(exe.as_os_str());
