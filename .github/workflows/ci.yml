@@ -1,7 +1,9 @@
 name: CI
 
-# Windows runners bill at 2x on private repos, so CI runs on pull requests and on demand only.
 on:
+  push:
+    branches: [main]
+    paths-ignore: ["site/**", "docs/**", "**.md"]
   pull_request:
   workflow_dispatch:
 

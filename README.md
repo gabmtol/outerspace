@@ -9,6 +9,12 @@
   <sub>Windows 11 · Rust + Tauri 2 · MCP · Liquid Glass (macOS 27 Golden Gate)</sub>
 </p>
 
+<p align="center">
+  <a href="https://github.com/gabmtol/outerspace/releases/latest/download/OuterSpace-setup.exe"><b>Baixar para Windows</b></a> ·
+  <a href="https://gabmtol.github.io/outerspace/">Site</a> ·
+  <a href="docs/PLANO.md">Plano</a>
+</p>
+
 ---
 
 > **Status:** MVP completo (F0–F5): instalador, monitor virtual, servidor MCP com 10 ferramentas, ponte stdio e setup dos clientes. Agentes reais já usam o OuterSpace pelo Claude Code. Próximos passos na seção v1 do [plano de implementação](docs/PLANO.md).
@@ -29,7 +35,7 @@ O OuterSpace cria um **monitor virtual de verdade** no Windows (um display que a
 
 ## Instalar
 
-1. Rode `OuterSpace_0.1.0_x64-setup.exe` (gerado por `scripts/build-installer.ps1`, veja abaixo). Instala só para o seu usuário, em `%LOCALAPPDATA%\OuterSpace`, sem pedir administrador.
+1. Baixe o [`OuterSpace-setup.exe`](https://github.com/gabmtol/outerspace/releases/latest/download/OuterSpace-setup.exe) da última release (ou gere com `scripts/build-installer.ps1`, veja abaixo) e rode. Instala só para o seu usuário, em `%LOCALAPPDATA%\OuterSpace`, sem pedir administrador. O instalador ainda não é assinado: se o Windows avisar, use *Mais informações → Executar assim mesmo*.
 2. Abra o OuterSpace e ligue o switch. Na primeira vez ele pede para instalar o driver de monitor virtual (**Parsec VDD**, assinado pela Parsec): baixa o instalador oficial, confere o SHA-256 e pede permissão de administrador uma única vez.
 3. Em **Connect an agent**, clique em **Add** no Claude Code, Codex ou OpenCode. Reinicie o cliente se ele estiver aberto.
 
@@ -102,6 +108,7 @@ A UI também abre num navegador comum com dados de exemplo (`npm run dev` e depo
 | `app/ui` | Interface (Vite + TypeScript, textos em `src/i18n/en.json`) |
 | `tests/mcp` | Testes ponta a ponta com o SDK oficial de MCP |
 | `assets/icon`, `scripts` | Ícone (gerado por `scripts/gen-app-icon.mjs`, empacotado por `scripts/build-icons.ps1`) e o build do instalador |
+| `site` | O site em [gabmtol.github.io/outerspace](https://gabmtol.github.io/outerspace/), publicado pelo workflow `pages.yml` |
 
 ## Design
 

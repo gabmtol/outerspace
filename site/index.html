@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OuterSpace — a monitor for your AI agent</title>
+  <meta name="description" content="OuterSpace adds a virtual display to Windows and hands it to AI agents over MCP. They open apps, look, click and type there — while you keep your screen, mouse and keyboard.">
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta property="og:title" content="OuterSpace — a monitor for your AI agent">
+  <meta property="og:description" content="A virtual display for AI agents on Windows. They work there; you keep your screen, mouse and keyboard.">
+  <meta property="og:image" content="https://gabmtol.github.io/outerspace/assets/og.png">
+  <meta property="og:url" content="https://gabmtol.github.io/outerspace/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" href="assets/icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="28" height="28">OuterSpace</a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/gabmtol/outerspace">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <img class="hero-icon" src="assets/icon.png" alt="OuterSpace icon: an orange screen with its frosted-glass twin" width="144" height="144">
+      <h1>Your AI agent gets<br>its own monitor.</h1>
+      <p class="lede">OuterSpace adds a virtual display to Windows and hands it to AI agents over MCP. They open apps, look, click and type there — while you keep your screen, your mouse and your keyboard.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/gabmtol/outerspace/releases/latest/download/OuterSpace-setup.exe">Download for Windows</a>
+        <a class="button" href="https://github.com/gabmtol/outerspace">View on GitHub</a>
+      </div>
+      <p class="fineprint">Windows 11 · Free and open source (MIT) · Version 0.1.0</p>
+    </section>
+
+    <section class="showcase" aria-label="The OuterSpace window">
+      <figure>
+        <picture>
+          <source srcset="assets/app-dark.png" media="(prefers-color-scheme: dark)">
+          <img src="assets/app-light.png" alt="The OuterSpace window: the virtual display is active at 1920×1080, Claude Code is configured, Codex CLI and OpenCode can be added with one click." width="380" height="460">
+        </picture>
+        <figcaption>One switch for the display. One click per agent.</figcaption>
+      </figure>
+    </section>
+
+    <section class="how" id="how">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li>
+          <span class="step">1</span>
+          <h3>Install and switch on</h3>
+          <p>OuterSpace lives in the tray. Flip the switch and a real 1920×1080 display appears just beside yours — the first time, it installs Parsec's signed display driver with one permission prompt.</p>
+        </li>
+        <li>
+          <span class="step">2</span>
+          <h3>Connect your agent</h3>
+          <p>Click <strong>Add</strong> next to Claude Code, Codex CLI or OpenCode. Any other MCP client can launch <code>outerspace-mcp.exe</code> over stdio.</p>
+        </li>
+        <li>
+          <span class="step">3</span>
+          <h3>Just ask</h3>
+          <p>“Use OuterSpace to open Edge on example.com and tell me what it says.” The agent launches, looks and clicks on its own display. You don't see a thing unless you want to.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="features" id="features">
+      <h2>Built to stay out of your way</h2>
+      <div class="grid">
+        <article>
+          <h3>A real display</h3>
+          <p>Not a minimized window or a hidden desktop: Windows sees a monitor, so Chrome, VS Code and DirectX apps render on the GPU exactly as they would on yours.</p>
+        </article>
+        <article>
+          <h3>Your input stays yours</h3>
+          <p>Clicks and keystrokes go straight to the agent's app as messages — your cursor and focus never move. For apps that need real input, it waits until you pause and borrows them for about 40 ms.</p>
+        </article>
+        <article>
+          <h3>Windows stay put</h3>
+          <p>Apps open directly on the virtual display without stealing focus. If one wanders back to your screen or grabs the foreground, OuterSpace brings it back and returns your focus.</p>
+        </article>
+        <article>
+          <h3>Any MCP agent</h3>
+          <p>One-click setup for Claude Code, Codex CLI and OpenCode — comments in your config files are kept and a backup is saved. If OuterSpace isn't running, the agent starts it.</p>
+        </article>
+        <article>
+          <h3>Local and private</h3>
+          <p>The server listens on 127.0.0.1 only, behind a token your agents' configs never see. Web pages can't reach it, and every action is logged. Switched off, it refuses everything.</p>
+        </article>
+        <article>
+          <h3>Light on resources</h3>
+          <p>With the display on and the window closed: about 0.04% CPU and 40 MB of memory. Screenshots of the whole display take around 70 ms.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="tools">
+      <h2>Ten tools, one display</h2>
+      <p class="sub">Coordinates are always relative to the virtual display, so the agent never touches yours.</p>
+      <ul class="chips">
+        <li><code>status</code>Is it on, and where</li>
+        <li><code>launch</code>Open an app on the display</li>
+        <li><code>list_windows</code>What's open there</li>
+        <li><code>screenshot</code>See the display or one window</li>
+        <li><code>click</code>Click, double-click, right-click</li>
+        <li><code>type_text</code>Type into the focused field</li>
+        <li><code>press_keys</code>Enter, Tab, Ctrl+S…</li>
+        <li><code>scroll</code>Wheel, both directions</li>
+        <li><code>move_window</code>Fill, left, right, center</li>
+        <li><code>close_window</code>Close, or force-quit</li>
+      </ul>
+    </section>
+
+    <section class="faq" id="faq">
+      <h2>Questions</h2>
+      <details>
+        <summary>Does it need administrator rights?</summary>
+        <p>Only once: installing the virtual display driver (Parsec VDD, signed by Parsec) asks for permission. OuterSpace downloads the official driver installer and checks its SHA-256 before running it. The app itself installs per user, without admin.</p>
+      </details>
+      <details>
+        <summary>Windows says it protected my PC when I run the installer.</summary>
+        <p>The installer isn't code-signed yet, so SmartScreen doesn't recognise it. Choose <em>More info → Run anyway</em>, or build it yourself from the source.</p>
+      </details>
+      <details>
+        <summary>Does it work on Windows 11 Home?</summary>
+        <p>Yes. It doesn't use Hyper-V, Windows Sandbox or Remote Desktop, none of which Home has.</p>
+      </details>
+      <details>
+        <summary>Can an agent turn the display on by itself?</summary>
+        <p>No. Only you can, with the switch in the window or the tray menu. While it's off, every tool except <code>status</code> refuses to run.</p>
+      </details>
+      <details>
+        <summary>Is it a sandbox?</summary>
+        <p>No. Apps on the virtual display run as you, with your permissions. OuterSpace keeps the agent off your screen and input — not out of your files. The action log is your trail.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <img src="assets/icon.png" alt="" width="20" height="20">
+    <span>OuterSpace · MIT License</span>
+    <a href="https://github.com/gabmtol/outerspace">Source</a>
+    <a href="https://github.com/gabmtol/outerspace/releases">Releases</a>
+    <a href="https://github.com/gabmtol/outerspace/blob/main/THIRD_PARTY_NOTICES.md">Third-party notices</a>
+  </footer>
+</body>
+</html>
