@@ -1,4 +1,4 @@
-//! The MCP server agents talk to (docs/PLANO.md §2.5, §5): Streamable HTTP on 127.0.0.1 behind a
+//! The MCP server agents talk to: Streamable HTTP on 127.0.0.1 behind a
 //! bearer token, hosted inside the tray app so it shares the app's [`PowerController`].
 
 mod log;

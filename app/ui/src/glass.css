@@ -76,6 +76,8 @@ main { flex: 1; padding: 4px 16px 0; display: flex; flex-direction: column; min-
   transition: background-color var(--motion);
 }
 .popup:hover:not(:disabled) { background-color: var(--control-fill-hover); }
+/* The open list inherits the text color but not the theme: give it both, opaque. */
+.popup option { background: var(--menu-fill); color: var(--menu-text); }
 .popup:disabled { opacity: 0.45; }
 .popup:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 

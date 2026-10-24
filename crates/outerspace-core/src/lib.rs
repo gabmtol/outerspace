@@ -16,5 +16,5 @@ pub use display::{DisplayInfo, DisplayMode, DriverStatus};
 pub use geom::Rect;
 pub use power::{ErrorCode, PowerController, PowerState};
 
-/// Fixed for the MVP (docs/PLANO.md §2.5); becomes configurable later.
+/// Fixed for the MVP; becomes configurable later.
 pub const MCP_PORT: u16 = 7342;

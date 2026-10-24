@@ -1,5 +1,5 @@
 //! `logs\actions.jsonl` in the data folder: one line per tool call, the only trail of what
-//! agents did (docs/PLANO.md §2.6).
+//! agents did.
 
 use std::fs::{File, OpenOptions};
 use std::io::Write;

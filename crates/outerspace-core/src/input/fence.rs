@@ -1,4 +1,4 @@
-//! Keeps the user's own mouse out of the virtual display (docs/PLANO.md §2.2). The display only
+//! Keeps the user's own mouse out of the virtual display. The display only
 //! touches the desktop by one pixel; this low-level mouse hook makes sure physical movement never
 //! gets into it — neither across that pixel nor through Windows 11's "Ease cursor movement between
 //! displays", which carries a cursor pushed past the edge of a screen onto the closest one, and so

@@ -1,5 +1,5 @@
 //! Clicking, typing and scrolling on the virtual display without taking over the user's mouse and
-//! keyboard (docs/PLANO.md §2.2). Two ways in:
+//! keyboard. Two ways in:
 //! - [`post`]: window messages straight to the target. Invisible to the user; some apps ignore them.
 //! - [`borrow`]: real input via SendInput, borrowing the cursor/foreground for a few dozen ms.
 //!

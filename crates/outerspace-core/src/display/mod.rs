@@ -1,6 +1,6 @@
 //! Virtual display backends. The MVP ships [`parsec::ParsecVdd`]; anything else (e.g. the MTT
 //! Virtual-Display-Driver) plugs in by implementing [`VirtualDisplayBackend`] — nothing outside this
-//! module may depend on Parsec specifics (docs/PLANO.md §2.1).
+//! module may depend on Parsec specifics.
 
 pub mod layout;
 pub mod parsec;

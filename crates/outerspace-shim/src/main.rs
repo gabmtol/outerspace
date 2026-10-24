@@ -1,5 +1,5 @@
 //! `outerspace-mcp.exe`: what MCP clients (Claude Code, Codex, OpenCode) launch. It bridges the stdio
-//! transport they speak to OuterSpace's Streamable HTTP endpoint on 127.0.0.1 (docs/PLANO.md §2.5),
+//! transport they speak to OuterSpace's Streamable HTTP endpoint on 127.0.0.1,
 //! so their config never holds the token, and starts OuterSpace in the tray when it is not running.
 //!
 //! stdin/stdout carry newline-delimited JSON-RPC messages; diagnostics go to stderr only.

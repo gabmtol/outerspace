@@ -90,7 +90,7 @@ check(escape.result.isError === true, "move_window refuses to put a window outsi
 const closed = text((await call("close_window", { hwnd })).result);
 check(closed.closed === true, "close_window closed it");
 
-// `--apps`: GPU-heavy apps that restore their own window positions (plan §10, F2 acceptance).
+// `--apps`: GPU-heavy apps that restore their own window positions (F2 acceptance).
 if (process.argv.includes("--apps")) {
   const apps = [
     { program: "msedge", args: ["--new-window", "about:blank"] },

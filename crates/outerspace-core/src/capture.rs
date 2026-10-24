@@ -1,4 +1,4 @@
-//! Screenshots of the virtual display (docs/PLANO.md §2.4).
+//! Screenshots of the virtual display.
 //!
 //! Plain GDI: since Windows 8 the screen DC is DWM's composed output, so DirectX/GPU-rendered
 //! windows come out right, and a virtual display has no hardware overlay planes that could hide

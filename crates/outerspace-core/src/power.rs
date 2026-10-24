@@ -1,5 +1,5 @@
 //! The on/off switch. One [`PowerController`] per process; the UI, the tray and the MCP server all go
-//! through it, so "off" really means off for everyone (docs/PLANO.md §2.6).
+//! through it, so "off" really means off for everyone.
 
 use std::sync::{Mutex, MutexGuard};
 

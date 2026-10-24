@@ -1,4 +1,4 @@
-//! The MCP tools (docs/PLANO.md §5). Coordinates agents see are always *display coordinates*:
+//! The MCP tools. Coordinates agents see are always *display coordinates*:
 //! (0, 0) is the top-left corner of the virtual display, in its physical pixels (it runs at 100%).
 
 use std::sync::{Arc, Mutex};

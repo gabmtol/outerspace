@@ -1,4 +1,4 @@
-/* Design tokens: macOS system colors and type over a Liquid Glass window (docs/PLANO.md §6.3).
+/* Design tokens: macOS system colors and type over a Liquid Glass window.
    Flat surfaces — no drop shadows, no gradients; depth comes from the glass and hairlines.
    Text colors are tuned to keep ≥4.5:1 even in the worst case (a light theme over a dark wallpaper
    and vice versa); that is why links and the accent fill are a shade deeper than macOS' own. */
@@ -47,6 +47,9 @@
   --control-fill-hover: rgba(0, 0, 0, 0.1);
   --track-off: rgba(0, 0, 0, 0.1);
   --hud: rgba(255, 255, 255, 0.9);
+  /* Opaque: WebView2 draws a <select>'s list in its own popup, outside the glass. */
+  --menu-fill: #ffffff;
+  --menu-text: #1d1d1f;
   --text-primary: rgba(0, 0, 0, 0.85);
   --text-secondary: rgba(0, 0, 0, 0.6);
   --link: #0058b0;
@@ -69,6 +72,8 @@
     --control-fill-hover: rgba(255, 255, 255, 0.18);
     --track-off: rgba(255, 255, 255, 0.16);
     --hud: rgba(44, 44, 46, 0.9);
+    --menu-fill: #2c2c2e;
+    --menu-text: #f5f5f7;
     --text-primary: rgba(255, 255, 255, 0.88);
     --text-secondary: rgba(255, 255, 255, 0.66);
     --link: #7dbdff;

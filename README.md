@@ -11,13 +11,12 @@
 
 <p align="center">
   <a href="https://github.com/gabmtol/outerspace/releases/latest/download/OuterSpace-setup.exe"><b>Baixar para Windows</b></a> ·
-  <a href="https://gabmtol.github.io/outerspace/">Site</a> ·
-  <a href="docs/PLANO.md">Plano</a>
+  <a href="https://gabmtol.github.io/outerspace/">Site</a>
 </p>
 
 ---
 
-> **Status:** MVP completo (F0–F5): instalador, monitor virtual, servidor MCP com 10 ferramentas, ponte stdio e setup dos clientes. Agentes reais já usam o OuterSpace pelo Claude Code. Próximos passos na seção v1 do [plano de implementação](docs/PLANO.md).
+> **Status:** MVP completo (F0–F5): instalador, monitor virtual, servidor MCP com 10 ferramentas, ponte stdio e setup dos clientes. Agentes reais já usam o OuterSpace pelo Claude Code. Próximos passos no [roadmap](#roadmap).
 
 ## O que é
 
@@ -54,7 +53,7 @@ OpenCode   ──┘          (abre o app se preciso)                     ├─
                                                                     └─ clique/teclado sem mover seu cursor
 ```
 
-Ferramentas MCP: `status`, `launch`, `list_windows`, `screenshot`, `click`, `type_text`, `press_keys`, `scroll`, `move_window`, `close_window`. Detalhes, decisões técnicas, resultados medidos e limitações conhecidas estão no [plano](docs/PLANO.md).
+Ferramentas MCP: `status`, `launch`, `list_windows`, `screenshot`, `click`, `type_text`, `press_keys`, `scroll`, `move_window`, `close_window`.
 
 Configuração manual (o botão **Add** faz isso por você):
 
@@ -66,7 +65,7 @@ claude mcp add --transport stdio --scope user outerspace -- "%LOCALAPPDATA%\Oute
 codex mcp add outerspace -- "%LOCALAPPDATA%\OuterSpace\outerspace-mcp.exe"
 ```
 
-OpenCode: o app edita o seu `opencode.jsonc`/`opencode.json` preservando comentários (veja §7 do plano). Qualquer outro cliente MCP pode usar o `outerspace-mcp.exe` por stdio, ou falar direto com `http://127.0.0.1:7342/mcp` com o cabeçalho `Authorization: Bearer <token>` (o token está em `config.json` na pasta de dados).
+OpenCode: o app edita o seu `opencode.jsonc`/`opencode.json` preservando comentários. Qualquer outro cliente MCP pode usar o `outerspace-mcp.exe` por stdio, ou falar direto com `http://127.0.0.1:7342/mcp` com o cabeçalho `Authorization: Bearer <token>` (o token está em `config.json` na pasta de dados).
 
 ## Desenvolvimento
 
@@ -112,7 +111,7 @@ A UI também abre num navegador comum com dados de exemplo (`npm run dev` e depo
 
 ## Design
 
-A UI e o ícone seguem o **Liquid Glass do macOS 27 Golden Gate**: vidro refinado com refração uniforme, contraste priorizando legibilidade (texto secundário ≥ 4,5:1 mesmo sobre papéis de parede extremos), cantos consistentes, toolbar unificada e ícone em camadas com profundidade. O acento é o laranja "International Orange" da ponte. Tokens e regras estão em §6.3 do plano. A UI é em inglês por padrão.
+A UI e o ícone seguem o **Liquid Glass do macOS 27 Golden Gate**: vidro refinado com refração uniforme, contraste priorizando legibilidade (texto secundário ≥ 4,5:1 mesmo sobre papéis de parede extremos), cantos consistentes, toolbar unificada e ícone em camadas com profundidade. O acento é o laranja "International Orange" da ponte. Os tokens de design estão em `app/ui/src/tokens.css`. A UI é em inglês por padrão.
 
 O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. Na bandeja, a tela de trás muda de cor com o estado (laranja ligado, cinza desligado, vermelho com erro). Os candidatos descartados estão em `assets/icon/minimal/` e `assets/icon/variants/`.
 

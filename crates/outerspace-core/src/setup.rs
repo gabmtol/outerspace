@@ -1,4 +1,4 @@
-//! Connecting MCP clients to OuterSpace (docs/PLANO.md §7). Each client gets the stdio shim
+//! Connecting MCP clients to OuterSpace. Each client gets the stdio shim
 //! (`outerspace-mcp.exe`, shipped next to OuterSpace.exe) as a local server named "outerspace":
 //! - Claude Code through its own CLI (`claude mcp add --scope user`), which owns `~/.claude.json`;
 //! - Codex by editing `~/.codex/config.toml` with toml_edit (comments survive), adding a longer

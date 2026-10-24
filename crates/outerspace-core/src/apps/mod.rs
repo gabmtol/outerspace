@@ -1,5 +1,5 @@
 //! Top-level windows: listing them, moving them onto the virtual display and closing them, without
-//! ever activating them (docs/PLANO.md §2.3). Launching lives in [`launch`].
+//! ever activating them. Launching lives in [`launch`].
 
 mod keeper;
 mod launch;
