@@ -11,7 +11,7 @@
 
 ---
 
-> **Status:** MVP funcionando (F0–F4), polimento final em andamento (F5). Agentes reais já usam o OuterSpace pelo Claude Code. Veja o [plano de implementação](docs/PLANO.md).
+> **Status:** MVP completo (F0–F5): instalador, monitor virtual, servidor MCP com 10 ferramentas, ponte stdio e setup dos clientes. Agentes reais já usam o OuterSpace pelo Claude Code. Próximos passos na seção v1 do [plano de implementação](docs/PLANO.md).
 
 ## O que é
 
@@ -117,8 +117,8 @@ O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. 
 | F1 | Monitor virtual liga/desliga pelo switch | ✅ liga em ~0,3 s, desliga em ~1,8 s |
 | F2 | Abrir/listar/mover janelas + screenshot + servidor MCP | ✅ testado com Bloco de Notas, Edge, Firefox e VS Code |
 | F3 | Clique, teclado e scroll sem roubar cursor/foco; cerca de mouse | ✅ post (Win32 e Chromium) e borrow verificados |
-| F4 | Shim stdio + setup de Claude Code, Codex e OpenCode | ✅ agente real no Claude Code; falta clicar Add no Codex/OpenCode |
-| F5 | Polimento, instalador, iniciar com o Windows | 🚧 |
+| F4 | Shim stdio + setup de Claude Code, Codex e OpenCode | ✅ agente real no Claude Code |
+| F5 | Polimento, instalador, iniciar com o Windows | ✅ instalador sem admin; 0,04% CPU e 40 MB com o monitor ligado |
 
 ## Licença
 

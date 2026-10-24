@@ -348,7 +348,7 @@ fn hardware_ids(set: &DevInfoSet, info: &SP_DEVINFO_DATA) -> Vec<String> {
         return Vec::new();
     }
     // REG_MULTI_SZ: UTF-16 strings separated by NULs, ending with an empty string.
-    let wide: Vec<u16> = buffer.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+    let wide: Vec<u16> = buffer.as_chunks::<2>().0.iter().map(|&unit| u16::from_le_bytes(unit)).collect();
     wide.split(|&c| c == 0).filter(|s| !s.is_empty()).map(String::from_utf16_lossy).collect()
 }
 

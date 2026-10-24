@@ -70,7 +70,7 @@ pub fn grab(area: Rect) -> Result<RgbImage, CaptureError> {
             return Err(CaptureError("could not read the captured pixels".into()));
         }
     }
-    let rgb: Vec<u8> = bgra.chunks_exact(4).flat_map(|px| [px[2], px[1], px[0]]).collect();
+    let rgb: Vec<u8> = bgra.as_chunks::<4>().0.iter().flat_map(|&[b, g, r, _]| [r, g, b]).collect();
     RgbImage::from_raw(area.w as u32, area.h as u32, rgb).ok_or_else(|| CaptureError("bad pixel buffer".into()))
 }
 
