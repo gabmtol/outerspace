@@ -59,6 +59,10 @@ struct Bridge {
     token: Mutex<String>,
     session: Mutex<Option<String>>,
     protocol: Mutex<Option<String>>,
+    /// The client's `initialize`, replayed to open a new session when the app has dropped ours.
+    handshake: Mutex<Option<Value>>,
+    /// Held while reopening, so overlapping requests that all got a 404 open a single session.
+    reopening: Mutex<()>,
     stdout: Mutex<std::io::Stdout>,
 }
 
@@ -72,6 +76,8 @@ impl Bridge {
             token: Mutex::new(config::load().map(|c| c.token).unwrap_or_default()),
             session: Mutex::new(None),
             protocol: Mutex::new(None),
+            handshake: Mutex::new(None),
+            reopening: Mutex::new(()),
             stdout: Mutex::new(std::io::stdout()),
         }
     }
@@ -80,6 +86,7 @@ impl Bridge {
         if let Err(reason) = self.ensure_running() {
             return self.reply_error(&message, &reason);
         }
+        *lock(&self.handshake) = Some(message.clone());
         self.forward(message, true);
     }
 
@@ -113,24 +120,11 @@ impl Bridge {
         self.agent.get(&health).call().is_ok_and(|response| response.status().is_success())
     }
 
-    fn forward(&self, message: Value, retry_auth: bool) {
-        let mut request = self
-            .agent
-            .post(&self.url)
-            .header("authorization", format!("Bearer {}", lock(&self.token)))
-            .header("accept", "application/json, text/event-stream")
-            .content_type("application/json");
-        if let Some(session) = lock(&self.session).clone() {
-            request = request.header("mcp-session-id", session);
-        }
-        if let Some(protocol) = lock(&self.protocol).clone() {
-            request = request.header("mcp-protocol-version", protocol);
-        }
-        let response = match request.send(message.to_string().as_str()) {
+    fn forward(&self, message: Value, retry: bool) {
+        let session = lock(&self.session).clone();
+        let response = match self.post(&message, session.as_deref()) {
             Ok(response) => response,
-            Err(err) => {
-                return self.reply_error(&message, &format!("OuterSpace is not reachable ({err}); is it running?"));
-            }
+            Err(err) => return self.reply_error(&message, &not_reachable(err)),
         };
 
         let status = response.status().as_u16();
@@ -139,13 +133,18 @@ impl Bridge {
         }
         match status {
             202 => {} // a notification, accepted
-            401 if retry_auth => {
+            401 if retry => {
                 // The token changed (config recreated): pick up the new one and try once more.
                 if let Some(config) = config::load() {
                     *lock(&self.token) = config.token;
                 }
                 self.forward(message, false);
             }
+            // The app ends a session after 5 idle minutes, and forgets them all when it restarts.
+            404 if retry && session.is_some() => match self.reopen(session) {
+                Ok(()) => self.forward(message, false),
+                Err(reason) => self.reply_error(&message, &reason),
+            },
             200..=299 => {
                 let streaming = header(&response, "content-type").is_some_and(|t| t.starts_with("text/event-stream"));
                 let mut body = BufReader::new(response.into_body().into_reader());
@@ -164,6 +163,47 @@ impl Bridge {
                 self.reply_error(&message, &format!("OuterSpace answered HTTP {status}: {}", text.trim()));
             }
         }
+    }
+
+    fn post(&self, message: &Value, session: Option<&str>) -> Result<Response<ureq::Body>, ureq::Error> {
+        let mut request = self
+            .agent
+            .post(&self.url)
+            .header("authorization", format!("Bearer {}", lock(&self.token)))
+            .header("accept", "application/json, text/event-stream")
+            .content_type("application/json");
+        // Only requests inside a session name the protocol: on an `initialize` the header would have
+        // to match the version the client asks for, not the one the app settled on.
+        if let Some(session) = session {
+            request = request.header("mcp-session-id", session);
+            if let Some(protocol) = lock(&self.protocol).clone() {
+                request = request.header("mcp-protocol-version", protocol);
+            }
+        }
+        request.send(message.to_string().as_str())
+    }
+
+    /// Opens a new session by replaying the client's `initialize`. The client never hears of it: it
+    /// already has its answer, and for it the session simply goes on.
+    fn reopen(&self, stale: Option<String>) -> Result<(), String> {
+        let _reopening = lock(&self.reopening);
+        if *lock(&self.session) != stale {
+            return Ok(()); // another request already reopened it
+        }
+        let handshake = lock(&self.handshake).clone().ok_or("OuterSpace dropped the session before it began")?;
+        let response = self.post(&handshake, None).map_err(not_reachable)?;
+        let status = response.status().as_u16();
+        let session = header(&response, "mcp-session-id");
+        // The answer stream closes after the one reply, which nobody needs.
+        let _ = std::io::copy(&mut response.into_body().into_reader(), &mut std::io::sink());
+        let Some(session) = session.filter(|_| status == 200) else {
+            return Err(format!("OuterSpace did not open a new session (HTTP {status})"));
+        };
+        let initialized = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
+        self.post(&initialized, Some(&session)).map_err(not_reachable)?;
+        *lock(&self.session) = Some(session);
+        eprintln!("outerspace-mcp: OuterSpace had dropped the session; opened a new one");
+        Ok(())
     }
 
     /// Server-sent events: every event's `data` is one JSON-RPC message for the client.
@@ -255,6 +295,10 @@ fn start_detached(app: &Path) -> Result<(), String> {
         }
     }
     Err(format!("could not start OuterSpace: {}", last_error.map(|e| e.message()).unwrap_or_default()))
+}
+
+fn not_reachable(err: ureq::Error) -> String {
+    format!("OuterSpace is not reachable ({err}); is it running?")
 }
 
 fn header(response: &Response<ureq::Body>, name: &str) -> Option<String> {
