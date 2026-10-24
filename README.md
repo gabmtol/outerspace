@@ -106,7 +106,7 @@ O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. 
 | F0 | Esqueleto Tauri 2 com bandeja e janela de vidro | ✅ |
 | F1 | Monitor virtual liga/desliga pelo switch | ✅ liga em ~0,3 s, desliga em ~1,8 s |
 | F2 | Abrir/listar/mover janelas + screenshot + servidor MCP | ✅ testado com Bloco de Notas, Edge, Firefox e VS Code |
-| F3 | Clique, teclado e scroll sem roubar cursor/foco; cerca de mouse | 🧪 modo post ok (Win32 e Chromium); borrow e cerca aguardam teste |
+| F3 | Clique, teclado e scroll sem roubar cursor/foco; cerca de mouse | ✅ post (Win32 e Chromium) e borrow verificados |
 | F4 | Shim stdio + setup de Claude Code, Codex e OpenCode | |
 | F5 | Polimento visual, instalador, iniciar com o Windows | |
 

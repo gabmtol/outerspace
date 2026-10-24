@@ -317,9 +317,10 @@ mod tests {
         let started = Instant::now();
         assert_eq!(click(cx, cy, Button::Left, false, &[], Mode::Borrow).unwrap().1, Used::Borrow);
         let clicked = started.elapsed();
-        assert_eq!(press(id(edit.hwnd), &keys::parse("ctrl+a").unwrap(), Mode::Auto).unwrap(), Used::Borrow);
+        // The click left the caret at the end of the text. (A plain EDIT control has no Ctrl+A.)
+        assert_eq!(press(id(edit.hwnd), &keys::parse("shift+home").unwrap(), Mode::Auto).unwrap(), Used::Borrow);
         assert_eq!(type_text(id(edit.hwnd), "x", Mode::Borrow).unwrap(), Used::Borrow);
-        assert_eq!(edit.wait_for("x"), "x", "ctrl+a then typing should replace the text");
+        assert_eq!(edit.wait_for("x"), "x", "shift+home then typing should replace the line");
         std::thread::sleep(Duration::from_millis(100));
         assert_eq!(cursor(), user_cursor, "borrow mode did not give the cursor back");
         assert_eq!(unsafe { GetForegroundWindow() }, user_foreground, "borrow mode did not give the foreground back");

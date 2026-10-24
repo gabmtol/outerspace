@@ -102,6 +102,7 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
         "open" => show_window(app),
         "fence" => {
             Fence::set_enabled(!Fence::enabled());
+            tracing::info!(enabled = Fence::enabled(), "mouse fence toggled");
             refresh(app);
         }
         "autostart" => {
