@@ -116,7 +116,8 @@ struct FocusGuard {
 impl FocusGuard {
     fn check(&mut self, windows: &HashMap<Hwnd, Option<Rect>>, display: Rect) {
         let foreground = unsafe { GetForegroundWindow() };
-        if foreground.is_invalid() {
+        // Borrow-mode input holds the foreground on purpose for a moment and hands it back itself.
+        if foreground.is_invalid() || crate::input::borrowing() {
             return;
         }
         let root = unsafe { GetAncestor(foreground, GA_ROOTOWNER) };

@@ -40,8 +40,9 @@ pub async fn run(
     // able to drive the user's machine through this port.
     let mut config = StreamableHttpServerConfig::default().enforce_origin_validation();
     config.cancellation_token = cancel.child_token();
+    let last_clicked = Arc::default();
     let service = StreamableHttpService::new(
-        move || Ok(OuterSpace::new(power.clone(), log.clone(), keeper.clone())),
+        move || Ok(OuterSpace::new(power.clone(), log.clone(), keeper.clone(), Arc::clone(&last_clicked))),
         Arc::new(LocalSessionManager::default()),
         config,
     );

@@ -58,6 +58,7 @@
     "turnOn": "Turn on",
     "turnOff": "Turn off",
     "open": "Open OuterSpace",
+    "fence": "Keep my mouse out of the virtual display",
     "autostart": "Start with Windows",
     "quit": "Quit"
   }

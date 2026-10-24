@@ -138,7 +138,7 @@ pub fn close(hwnd: Hwnd, force: bool) -> Result<bool, AppError> {
 
 /// Puts `target` back in the foreground from a background process: borrowing the input queue of the
 /// window that holds the foreground now is what lets SetForegroundWindow through.
-fn give_foreground_to(target: HWND) -> bool {
+pub(crate) fn give_foreground_to(target: HWND) -> bool {
     unsafe {
         let current = GetForegroundWindow();
         let ours = GetCurrentThreadId();

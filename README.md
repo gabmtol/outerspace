@@ -11,7 +11,7 @@
 
 ---
 
-> **Status:** em desenvolvimento. O app na bandeja liga o monitor virtual e já serve MCP em `127.0.0.1:7342` com `status`, `launch`, `list_windows`, `screenshot`, `move_window` e `close_window` (F0–F2). Clique e teclado (F3) e o shim stdio para os clientes (F4) vêm a seguir. Veja o [plano de implementação](docs/PLANO.md).
+> **Status:** em desenvolvimento. O app na bandeja liga o monitor virtual e serve MCP em `127.0.0.1:7342` com `status`, `launch`, `list_windows`, `screenshot`, `move_window`, `close_window`, `click`, `type_text`, `press_keys` e `scroll` (F0–F3). O shim stdio para os clientes (F4) vem a seguir. Veja o [plano de implementação](docs/PLANO.md).
 
 ## O que é
 
@@ -77,6 +77,7 @@ Teste ponta a ponta pelo MCP, como um agente usaria (com o app aberto e o monito
 cd tests/mcp
 npm install
 npm run smoke            # ou: node smoke.mjs --apps  (também abre Edge, Firefox e VS Code)
+node smoke.mjs --input   # clique/digitação/teclas/scroll no Edge em modo post
 ```
 
 Enquanto o shim stdio (F4) não sai, dá para conectar um cliente MCP direto por HTTP: `http://127.0.0.1:7342/mcp` com o cabeçalho `Authorization: Bearer <token>` (o token está em `%LOCALAPPDATA%\OuterSpace\config.json`).
@@ -105,7 +106,7 @@ O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. 
 | F0 | Esqueleto Tauri 2 com bandeja e janela de vidro | ✅ |
 | F1 | Monitor virtual liga/desliga pelo switch | ✅ liga em ~0,3 s, desliga em ~1,8 s |
 | F2 | Abrir/listar/mover janelas + screenshot + servidor MCP | ✅ testado com Bloco de Notas, Edge, Firefox e VS Code |
-| F3 | Clique, teclado e scroll sem roubar cursor/foco; cerca de mouse | |
+| F3 | Clique, teclado e scroll sem roubar cursor/foco; cerca de mouse | 🧪 modo post ok (Win32 e Chromium); borrow e cerca aguardam teste |
 | F4 | Shim stdio + setup de Claude Code, Codex e OpenCode | |
 | F5 | Polimento visual, instalador, iniciar com o Windows | |
 

@@ -127,6 +127,41 @@ if (process.argv.includes("--apps")) {
   }
 }
 
+// `--input`: click/type/keys/scroll in Chromium, in post mode only — never touches the user's
+// mouse or keyboard, so it is safe to run while they use the PC. The page mirrors the text box into
+// the window title, which list_windows reports.
+if (process.argv.includes("--input")) {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const page =
+    "data:text/html,<title>ready</title><textarea autofocus oninput=\"document.title='typed:'+this.value\" " +
+    "style='width:95vw;height:90vh;font-size:40px'></textarea>";
+  const launched = text((await call("launch", { program: "msedge", args: ["--new-window", page] })).result);
+  const window = launched.window;
+  check(window?.on_virtual_display === true, "edge with a text box opened on the virtual display");
+  if (window) {
+    await sleep(1500);
+    const [cx, cy] = [window.rect.x + window.rect.w / 2, window.rect.y + window.rect.h / 2];
+    const titleOf = async () => text((await call("list_windows")).result).find((w) => w.hwnd === window.hwnd)?.title ?? "";
+    const waitTitle = async (want) => {
+      for (let i = 0; i < 20 && !(await titleOf()).includes(want); i++) await sleep(150);
+      return titleOf();
+    };
+    const clicked = text((await call("click", { x: cx, y: cy, input_mode: "post" })).result);
+    check(clicked.input_mode_used === "post", `click delivered by ${clicked.input_mode_used ?? JSON.stringify(clicked)}`);
+    text((await call("type_text", { text: "hello", input_mode: "post" })).result);
+    let title = await waitTitle("typed:hello");
+    check(title.includes("typed:hello"), `type_text reached Chromium (title: "${title}")`);
+    text((await call("press_keys", { keys: "backspace", input_mode: "post" })).result);
+    title = await waitTitle("typed:hell ");
+    check(/typed:hell(?!o)/.test(title), `press_keys backspace reached Chromium (title: "${title}")`);
+    const scrolled = text((await call("scroll", { x: cx, y: cy, dy: -3, input_mode: "post" })).result);
+    check(scrolled.input_mode_used === "post", "scroll delivered");
+    const shot = await call("screenshot", { hwnd: window.hwnd, format: "jpeg", scale: 0.5 });
+    writeFileSync(join(out, "smoke-input.jpg"), Buffer.from(shot.result.content[0].data, "base64"));
+    text((await call("close_window", { hwnd: window.hwnd })).result);
+  }
+}
+
 await client.close();
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

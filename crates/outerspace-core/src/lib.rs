@@ -6,6 +6,7 @@ pub mod capture;
 pub mod config;
 pub mod display;
 pub mod geom;
+pub mod input;
 pub mod paths;
 pub mod power;
 pub mod system;

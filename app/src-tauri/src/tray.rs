@@ -1,4 +1,5 @@
 use outerspace_core::PowerState;
+use outerspace_core::input::fence::Fence;
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -83,6 +84,7 @@ fn menu(app: &AppHandle, state: &PowerState) -> tauri::Result<Menu<Wry>> {
             &MenuItem::with_id(app, "power", t(if on { "tray.turnOff" } else { "tray.turnOn" }), !busy, None::<&str>)?,
             &MenuItem::with_id(app, "open", t("tray.open"), true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
+            &CheckMenuItem::with_id(app, "fence", t("tray.fence"), true, Fence::enabled(), None::<&str>)?,
             &CheckMenuItem::with_id(app, "autostart", t("tray.autostart"), true, autostart, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "quit", t("tray.quit"), true, None::<&str>)?,
@@ -98,6 +100,10 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
             tauri::async_runtime::spawn(async move { commands::switch_power(&app, on).await });
         }
         "open" => show_window(app),
+        "fence" => {
+            Fence::set_enabled(!Fence::enabled());
+            refresh(app);
+        }
         "autostart" => {
             let launcher = app.autolaunch();
             let _ = if launcher.is_enabled().unwrap_or(false) { launcher.disable() } else { launcher.enable() };

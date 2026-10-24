@@ -9,7 +9,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use outerspace_core::display::parsec::ParsecVdd;
-use outerspace_core::{MCP_PORT, PowerController, config, paths};
+use outerspace_core::input::fence::Fence;
+use outerspace_core::{MCP_PORT, PowerController, PowerState, config, paths};
 use outerspace_mcp::CancellationToken;
 use tauri::{Manager, RunEvent, WindowEvent};
 use tracing_subscriber::EnvFilter;
@@ -37,7 +38,14 @@ fn main() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
-            let power = Arc::new(PowerController::new(Box::new(ParsecVdd::new()), move |_| commands::publish(&handle)));
+            let fence = Fence::start();
+            let power = Arc::new(PowerController::new(Box::new(ParsecVdd::new()), move |state| {
+                Fence::set_area(match state {
+                    PowerState::On { display } => Some(display.rect()),
+                    _ => None,
+                });
+                commands::publish(&handle)
+            }));
             let mcp_stop = CancellationToken::new();
             tauri::async_runtime::spawn({
                 let (power, stop) = (power.clone(), mcp_stop.clone());
@@ -48,7 +56,7 @@ fn main() {
                     }
                 }
             });
-            app.manage(commands::AppState { power, installing: AtomicBool::new(false), mcp_stop });
+            app.manage(commands::AppState { power, installing: AtomicBool::new(false), mcp_stop, _fence: fence });
             tray::create(app.handle())?;
             if !std::env::args().any(|arg| arg == HIDDEN_ARG) {
                 tray::show_window(app.handle());

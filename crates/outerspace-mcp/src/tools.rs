@@ -1,12 +1,13 @@
 //! The MCP tools (docs/PLANO.md §5). Coordinates agents see are always *display coordinates*:
 //! (0, 0) is the top-left corner of the virtual display, in its physical pixels (it runs at 100%).
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use base64::Engine;
 use outerspace_core::apps::{self, Keeper, LaunchRequest, WindowInfo};
 use outerspace_core::capture::{self, Format};
+use outerspace_core::input::{self, Button, keys};
 use outerspace_core::{DisplayInfo, PowerController, PowerState, Rect};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock};
@@ -29,6 +30,94 @@ pub struct OuterSpace {
     log: Arc<ActionLog>,
     /// Shared by all sessions: holds the agent's windows on the virtual display.
     keeper: Arc<Keeper>,
+    /// Top-level window of the last click: where typing goes when no `hwnd` is given.
+    last_clicked: Arc<Mutex<Option<i64>>>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum InputMode {
+    /// `post` whenever possible, `borrow` when the request needs it (Alt/Win held, clicking a title bar,
+    /// shortcuts with modifiers).
+    #[default]
+    Auto,
+    /// Window messages straight to the app: the user's mouse and keyboard are never touched. Some apps
+    /// (games, some canvases) ignore them.
+    Post,
+    /// Real input: briefly borrows the user's cursor/keyboard focus (tens of ms) once they pause, then
+    /// gives it back. Use when `post` had no visible effect.
+    Borrow,
+}
+
+impl From<InputMode> for input::Mode {
+    fn from(mode: InputMode) -> Self {
+        match mode {
+            InputMode::Auto => input::Mode::Auto,
+            InputMode::Post => input::Mode::Post,
+            InputMode::Borrow => input::Mode::Borrow,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum MouseButton {
+    #[default]
+    Left,
+    Right,
+    Middle,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ClickParams {
+    /// Display coordinates (take them from a screenshot: region origin + image position / scale).
+    x: i32,
+    y: i32,
+    #[serde(default)]
+    button: MouseButton,
+    #[serde(default)]
+    double: bool,
+    /// Keys held during the click: "ctrl", "shift", "alt", "win".
+    #[serde(default)]
+    modifiers: Vec<String>,
+    #[serde(default)]
+    input_mode: InputMode,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct TypeParams {
+    /// Text to type; "\n" presses Enter.
+    text: String,
+    /// Window to type into (default: the window you clicked last, else the front-most one on the display).
+    /// The text goes to the control focused inside it — click the text box first.
+    hwnd: Option<i64>,
+    #[serde(default)]
+    input_mode: InputMode,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct KeysParams {
+    /// One key or combo: "enter", "tab", "esc", "ctrl+s", "ctrl+shift+t", "alt+f4", "f5", "pagedown", "a".
+    keys: String,
+    /// Window to send it to (default: as for `type_text`).
+    hwnd: Option<i64>,
+    #[serde(default)]
+    input_mode: InputMode,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ScrollParams {
+    /// Display coordinates of the point to scroll at.
+    x: i32,
+    y: i32,
+    /// Wheel notches: positive scrolls up, negative scrolls down (one notch is usually 3 lines).
+    #[serde(default)]
+    dy: i32,
+    /// Horizontal notches: positive scrolls right, negative left.
+    #[serde(default)]
+    dx: i32,
+    #[serde(default)]
+    input_mode: InputMode,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -153,8 +242,13 @@ impl AgentWindow {
 
 #[tool_router]
 impl OuterSpace {
-    pub fn new(power: Arc<PowerController>, log: Arc<ActionLog>, keeper: Arc<Keeper>) -> Self {
-        OuterSpace { power, log, keeper }
+    pub fn new(
+        power: Arc<PowerController>,
+        log: Arc<ActionLog>,
+        keeper: Arc<Keeper>,
+        last_clicked: Arc<Mutex<Option<i64>>>,
+    ) -> Self {
+        OuterSpace { power, log, keeper, last_clicked }
     }
 
     #[tool(description = "Whether OuterSpace is on and where its virtual display is. Call this first. Works even \
@@ -354,6 +448,116 @@ impl OuterSpace {
             Err(err) => self.fail("close_window", args, err),
         }
     }
+
+    #[tool(description = "Click at a point on the virtual display (display coordinates). By default the click is \
+                          delivered without touching the user's mouse. Take a screenshot afterwards to see the \
+                          effect; if nothing happened, retry with input_mode \"borrow\".")]
+    async fn click(&self, Parameters(params): Parameters<ClickParams>) -> ToolResult {
+        let display = match self.display() {
+            Ok(display) => display.rect(),
+            Err(off) => return Ok(off),
+        };
+        let args = json!({ "x": params.x, "y": params.y, "button": format!("{:?}", params.button),
+                           "double": params.double, "modifiers": params.modifiers, "mode": format!("{:?}", params.input_mode) });
+        if !Rect::new(0, 0, display.w, display.h).contains(params.x, params.y) {
+            return tool_error(format!(
+                "({}, {}) is outside the virtual display ({}x{})",
+                params.x, params.y, display.w, display.h
+            ));
+        }
+        let modifiers =
+            match params.modifiers.iter().map(|m| keys::Modifier::parse(m).ok_or(m)).collect::<Result<Vec<_>, _>>() {
+                Ok(modifiers) => modifiers,
+                Err(bad) => return tool_error(format!("unknown modifier \"{bad}\" (use ctrl, shift, alt, win)")),
+            };
+        let button = match params.button {
+            MouseButton::Left => Button::Left,
+            MouseButton::Right => Button::Right,
+            MouseButton::Middle => Button::Middle,
+        };
+        let (x, y, double, mode) =
+            (display.x + params.x, display.y + params.y, params.double, params.input_mode.into());
+        match blocking(move || input::click(x, y, button, double, &modifiers, mode)).await? {
+            Ok((hwnd, used)) => {
+                *self.last_clicked.lock().unwrap_or_else(|p| p.into_inner()) = Some(hwnd);
+                self.log.record("click", args, true, &format!("{used:?}"));
+                json_result(json!({ "hwnd": hwnd, "input_mode_used": used }))
+            }
+            Err(err) => self.fail("click", args, err),
+        }
+    }
+
+    #[tool(description = "Type text into a window on the virtual display — into the control focused inside it, so \
+                          click the text box first. Works without touching the user's keyboard by default.")]
+    async fn type_text(&self, Parameters(params): Parameters<TypeParams>) -> ToolResult {
+        let display = match self.display() {
+            Ok(display) => display.rect(),
+            Err(off) => return Ok(off),
+        };
+        // The text itself stays out of the log: agents type passwords too.
+        let args = json!({ "chars": params.text.chars().count(), "hwnd": params.hwnd, "mode": format!("{:?}", params.input_mode) });
+        let hwnd = match self.input_target(params.hwnd, display).await? {
+            Ok(hwnd) => hwnd,
+            Err(message) => return tool_error(message),
+        };
+        let (text, mode) = (params.text, params.input_mode.into());
+        match blocking(move || input::type_text(hwnd, &text, mode)).await? {
+            Ok(used) => {
+                self.log.record("type_text", args, true, &format!("{used:?}"));
+                json_result(json!({ "hwnd": hwnd, "input_mode_used": used }))
+            }
+            Err(err) => self.fail("type_text", args, err),
+        }
+    }
+
+    #[tool(description = "Press a key or shortcut (\"enter\", \"tab\", \"ctrl+s\", \"alt+f4\") in a window on the \
+                          virtual display. Plain keys go without touching the user's keyboard; shortcuts with \
+                          modifiers need input_mode borrow, which auto picks for you.")]
+    async fn press_keys(&self, Parameters(params): Parameters<KeysParams>) -> ToolResult {
+        let display = match self.display() {
+            Ok(display) => display.rect(),
+            Err(off) => return Ok(off),
+        };
+        let args = json!({ "keys": params.keys, "hwnd": params.hwnd, "mode": format!("{:?}", params.input_mode) });
+        let combo = match keys::parse(&params.keys) {
+            Ok(combo) => combo,
+            Err(message) => return tool_error(message),
+        };
+        let hwnd = match self.input_target(params.hwnd, display).await? {
+            Ok(hwnd) => hwnd,
+            Err(message) => return tool_error(message),
+        };
+        let mode = params.input_mode.into();
+        match blocking(move || input::press(hwnd, &combo, mode)).await? {
+            Ok(used) => {
+                self.log.record("press_keys", args, true, &format!("{used:?}"));
+                json_result(json!({ "hwnd": hwnd, "input_mode_used": used }))
+            }
+            Err(err) => self.fail("press_keys", args, err),
+        }
+    }
+
+    #[tool(description = "Scroll with the mouse wheel at a point on the virtual display: dy > 0 scrolls up, dy < 0 \
+                          down; dx scrolls sideways.")]
+    async fn scroll(&self, Parameters(params): Parameters<ScrollParams>) -> ToolResult {
+        let display = match self.display() {
+            Ok(display) => display.rect(),
+            Err(off) => return Ok(off),
+        };
+        let args = json!({ "x": params.x, "y": params.y, "dy": params.dy, "dx": params.dx });
+        if !Rect::new(0, 0, display.w, display.h).contains(params.x, params.y) {
+            return tool_error(format!("({}, {}) is outside the virtual display", params.x, params.y));
+        }
+        let (x, y, dy, dx, mode) =
+            (display.x + params.x, display.y + params.y, params.dy, params.dx, params.input_mode.into());
+        match blocking(move || input::scroll(x, y, dy, dx, mode)).await? {
+            Ok((hwnd, used)) => {
+                self.log.record("scroll", args, true, &format!("{used:?}"));
+                json_result(json!({ "hwnd": hwnd, "input_mode_used": used }))
+            }
+            Err(err) => self.fail("scroll", args, err),
+        }
+    }
 }
 
 #[tool_handler(
@@ -362,8 +566,11 @@ impl OuterSpace {
                     drive apps without taking over the user's screen, mouse or keyboard. Call `status` first; if \
                     OuterSpace is off, ask the user to turn it on. Start apps with `launch` (they open on the \
                     virtual display), take a `screenshot` before acting, and use display coordinates: (0, 0) is the \
-                    top-left of the virtual display whatever the screenshot scale. Never move or close the user's \
-                    own windows unless they ask you to."
+                    top-left of the virtual display whatever the screenshot scale. Interact with `click`, \
+                    `type_text`, `press_keys` and `scroll`: by default they reach the app without touching the \
+                    user's mouse or keyboard; if a screenshot shows no effect, retry with input_mode \"borrow\", \
+                    which briefly borrows the real cursor/keyboard once the user pauses. Never move or close the \
+                    user's own windows unless they ask you to."
 )]
 impl ServerHandler for OuterSpace {}
 
@@ -373,6 +580,30 @@ impl OuterSpace {
             PowerState::On { display } => Ok(display),
             _ => Err(CallToolResult::error(vec![ContentBlock::text(OFF)])),
         }
+    }
+
+    /// Where keyboard input goes: the given window, else the last one clicked, else the front-most
+    /// window on the display — and only ever a window on the virtual display.
+    async fn input_target(&self, hwnd: Option<i64>, display: Rect) -> Result<Result<i64, String>, ErrorData> {
+        let last_clicked = *self.last_clicked.lock().unwrap_or_else(|p| p.into_inner());
+        blocking(move || {
+            let on_display =
+                |hwnd: i64| apps::describe_window(hwnd).is_ok_and(|w| w.rect.fraction_inside(&display) > ON_DISPLAY);
+            if let Some(hwnd) = hwnd {
+                return if on_display(hwnd) {
+                    Ok(hwnd)
+                } else {
+                    Err(format!("window {hwnd} is not on the virtual display"))
+                };
+            }
+            last_clicked
+                .filter(|&hwnd| on_display(hwnd))
+                .or_else(|| {
+                    apps::list().into_iter().find(|w| w.rect.fraction_inside(&display) > ON_DISPLAY).map(|w| w.hwnd)
+                })
+                .ok_or_else(|| "there is no window on the virtual display to type into; launch one first".to_string())
+        })
+        .await
     }
 
     fn fail(&self, tool: &str, args: serde_json::Value, err: impl std::fmt::Display) -> ToolResult {

@@ -14,6 +14,8 @@ pub struct AppState {
     pub installing: AtomicBool,
     /// Stops the MCP server on exit.
     pub mcp_stop: outerspace_mcp::CancellationToken,
+    /// Keeps the user's mouse out of the virtual display for as long as the app runs.
+    pub _fence: outerspace_core::input::fence::Fence,
 }
 
 /// Everything the UI renders. Mirrored by `Status` in app/ui/src/types.ts.
