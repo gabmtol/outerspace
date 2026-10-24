@@ -1,7 +1,7 @@
 # Rust / Tauri
 /target/
 **/target/
-src-tauri/gen/
+app/src-tauri/gen/
 
 # Node
 node_modules/

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OuterSpace</title>
+  <link rel="stylesheet" href="./src/tokens.css">
+  <link rel="stylesheet" href="./src/glass.css">
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"><span class="blob warm"></span><span class="blob cool"></span></div>
+
+  <div class="window">
+    <header class="titlebar" data-tauri-drag-region>
+      <div class="brand" data-tauri-drag-region>
+        <img class="brand-icon" src="/icon.svg" alt="" data-tauri-drag-region>
+        <span data-i18n="app.name" data-tauri-drag-region></span>
+      </div>
+      <div class="controls">
+        <button class="ctl" id="btn-minimize" data-i18n-title="window.minimize">
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 5h7"/></svg>
+        </button>
+        <button class="ctl" id="btn-close" data-i18n-title="window.close">
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="card power" id="power" data-state="off">
+        <div class="power-row">
+          <div class="power-text">
+            <h1 class="title" data-i18n="power.title"></h1>
+            <p class="status"><span class="dot" aria-hidden="true"></span><span id="status-text"></span></p>
+          </div>
+          <button class="switch" id="power-switch" role="switch" aria-checked="false" data-i18n-title="power.toggle">
+            <span class="knob"></span>
+          </button>
+        </div>
+        <p class="detail" id="status-detail"></p>
+        <div class="power-actions" id="power-actions" hidden>
+          <button class="btn primary" id="btn-install" data-i18n="actions.installDriver"></button>
+          <button class="btn" id="btn-retry" data-i18n="actions.retry"></button>
+          <button class="btn subtle" id="btn-log" data-i18n="actions.viewLog"></button>
+        </div>
+      </section>
+
+      <h2 class="section-label" data-i18n="clients.section"></h2>
+      <section class="card clients" id="clients"></section>
+
+      <p class="caption">
+        <span id="server-caption"></span>
+        <button class="link" id="btn-manual" data-i18n="server.showManual"></button>
+      </p>
+      <section class="card manual" id="manual" hidden></section>
+    </main>
+
+    <footer class="footer">
+      <span id="version"></span>
+      <span class="sep" aria-hidden="true">·</span>
+      <button class="link" id="btn-logs" data-i18n="footer.logs"></button>
+      <span class="sep" aria-hidden="true">·</span>
+      <label class="mini-toggle">
+        <span data-i18n="footer.autostart"></span>
+        <input type="checkbox" id="autostart">
+        <span class="mini-track" aria-hidden="true"></span>
+      </label>
+    </footer>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <template id="client-row">
+    <div class="client">
+      <span class="client-icon" aria-hidden="true"></span>
+      <span class="client-name"></span>
+      <button class="btn primary sm add"></button>
+      <button class="btn sm copy"></button>
+    </div>
+  </template>
+
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

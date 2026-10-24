@@ -1,0 +1,21 @@
+[package]
+name = "outerspace"
+description = "A virtual display for AI agents to work on without getting in your way"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+outerspace-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tauri = { version = "2.12.5", features = ["tray-icon", "image-png"] }
+tauri-plugin-autostart = "2.7.0"
+tauri-plugin-single-instance = "2.5.4"
+tracing-appender = "0.2.5"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
