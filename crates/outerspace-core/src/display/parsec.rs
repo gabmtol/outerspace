@@ -31,7 +31,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 use windows::Win32::Devices::DeviceAndDriverInstallation::{
@@ -39,15 +39,17 @@ use windows::Win32::Devices::DeviceAndDriverInstallation::{
     CM_PROB_NEED_RESTART, CR_SUCCESS, DIGCF_DEVICEINTERFACE, DIGCF_PRESENT, DN_DRIVER_LOADED, DN_HAS_PROBLEM,
     DN_STARTED, HDEVINFO, SETUP_DI_GET_CLASS_DEVS_FLAGS, SP_DEVICE_INTERFACE_DATA, SP_DEVICE_INTERFACE_DETAIL_DATA_W,
     SP_DEVINFO_DATA, SPDRP_HARDWAREID, SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInfo,
-    SetupDiEnumDeviceInterfaces, SetupDiGetClassDevsW, SetupDiGetDeviceInterfaceDetailW,
+    SetupDiEnumDeviceInterfaces, SetupDiGetClassDevsW, SetupDiGetDeviceInstanceIdW, SetupDiGetDeviceInterfaceDetailW,
     SetupDiGetDeviceRegistryPropertyW,
 };
-use windows::Win32::Foundation::{CloseHandle, ERROR_CANCELLED, GENERIC_READ, GENERIC_WRITE, HANDLE, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{
+    CloseHandle, ERROR_CANCELLED, GENERIC_READ, GENERIC_WRITE, HANDLE, STATUS_PENDING, WAIT_OBJECT_0,
+};
 use windows::Win32::Storage::FileSystem::{
     CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_FLAG_NO_BUFFERING, FILE_FLAG_OVERLAPPED, FILE_FLAG_WRITE_THROUGH,
     FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
-use windows::Win32::System::IO::{CancelIoEx, DeviceIoControl, GetOverlappedResult, GetOverlappedResultEx, OVERLAPPED};
+use windows::Win32::System::IO::{CancelIoEx, DeviceIoControl, GetOverlappedResultEx, OVERLAPPED};
 use windows::Win32::System::Threading::{CreateEventW, GetExitCodeProcess, INFINITE, WaitForSingleObject};
 use windows::Win32::UI::Shell::{SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW};
 use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
@@ -72,7 +74,15 @@ const IOCTL_VERSION: u32 = 0x0022_e010;
 /// The driver unplugs every display after ~1 s without an update; ping well inside that.
 const PING_INTERVAL: Duration = Duration::from_millis(50);
 const IOCTL_TIMEOUT_MS: u32 = 5_000;
+/// How long a cancelled request gets to hand its buffers back.
+const CANCEL_TIMEOUT_MS: u32 = 2_000;
 const ATTACH_TIMEOUT: Duration = Duration::from_secs(10);
+/// Longest the switch waits on Windows to arrange the display: when the driver crashes mid-change,
+/// the display APIs can sit on the call indefinitely.
+const LAYOUT_TIMEOUT: Duration = Duration::from_secs(20);
+/// Breathing room between mode changes. The driver rebuilds its swap chain on each one, and a
+/// burst of 13 changes in ~2 s crashed it in testing.
+const MODE_SETTLE: Duration = Duration::from_secs(1);
 
 /// Official installer (Authenticode-signed by Parsec Cloud, Inc.). Fallback if 0.45 misbehaves on a
 /// machine: parsec-vdd-0.41.0.0.exe, sha256 317977c5abd58f1c3f7b27ef7f96947efd07e6d35b27e415cea5daa6007629b1.
@@ -105,6 +115,8 @@ pub struct ParsecVdd {
     session: Option<Session>,
     /// GDI name of the output driving the display, while connected.
     output: Option<String>,
+    /// When the display last got a mode, to space the changes out.
+    last_mode_change: Option<Instant>,
 }
 
 impl ParsecVdd {
@@ -135,13 +147,16 @@ impl VirtualDisplayBackend for ParsecVdd {
         // From here on, dropping `session` unplugs the display again — including on the error paths below.
         let session = Session::start(device, index);
 
-        let name = layout::wait_for_extended(MONITOR_ID, ATTACH_TIMEOUT)?;
-        tracing::debug!(elapsed = ?started.elapsed(), %name, "display on the desktop");
-        let info = layout::place_beside_desktop(&name, mode)?;
+        let (name, info) = with_deadline(move || {
+            let name = layout::wait_for_extended(MONITOR_ID, ATTACH_TIMEOUT)?;
+            tracing::debug!(elapsed = ?started.elapsed(), %name, "display on the desktop");
+            Ok((name.clone(), layout::place_beside_desktop(&name, mode)?))
+        })?;
         tracing::debug!(elapsed = ?started.elapsed(), "display placed");
         tracing::info!(?info, index, "virtual display connected");
         self.session = Some(session);
         self.output = Some(name);
+        self.last_mode_change = Some(Instant::now());
         Ok(info)
     }
 
@@ -150,11 +165,35 @@ impl VirtualDisplayBackend for ParsecVdd {
     }
 
     fn set_mode(&mut self, mode: DisplayMode) -> Result<DisplayInfo, DisplayError> {
-        let output = self.output.as_deref().ok_or_else(|| DisplayError::Failed("the virtual display is off".into()))?;
+        let output = self.output.clone().ok_or_else(|| DisplayError::Failed("the virtual display is off".into()))?;
+        if let Some(wait) = self.last_mode_change.and_then(|at| MODE_SETTLE.checked_sub(at.elapsed())) {
+            std::thread::sleep(wait);
+        }
         // Re-placed, not just resized: the one-pixel contact with the desktop depends on the height.
-        let info = layout::place_beside_desktop(output, mode)?;
+        let placed = with_deadline(move || layout::place_beside_desktop(&output, mode));
+        self.last_mode_change = Some(Instant::now());
+        let info = placed?;
         tracing::info!(?info, "virtual display mode changed");
         Ok(info)
+    }
+
+    fn restart_driver(&mut self) -> Result<(), DisplayError> {
+        self.disconnect();
+        let id = adapter_instance_id().ok_or(DisplayError::Driver(DriverStatus::NotInstalled))?;
+        let system = std::env::var_os("SystemRoot").unwrap_or_else(|| r"C:\Windows".into());
+        let pnputil = Path::new(&system).join("System32").join("pnputil.exe");
+        let code = run_elevated(&pnputil, &format!("/restart-device \"{id}\""))?;
+        tracing::info!(code, %id, "driver restart finished");
+        // 3010: done, but Windows wants a reboot; the driver status says so.
+        if code != 0 && code != 3010 {
+            return Err(DisplayError::Failed(format!("restarting the driver failed (pnputil exit code {code})")));
+        }
+        // The device comes back a moment after pnputil returns.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while query_status() != DriverStatus::Ready && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Ok(())
     }
 
     fn disconnect(&mut self) {
@@ -228,6 +267,31 @@ impl Drop for Session {
     }
 }
 
+/// Runs a display-layout job on its own thread and stops waiting after [`LAYOUT_TIMEOUT`]. A job
+/// stuck inside Windows stays stuck on its thread, but the switch moves on.
+fn with_deadline<T: Send + 'static>(
+    job: impl FnOnce() -> Result<T, DisplayError> + Send + 'static,
+) -> Result<T, DisplayError> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("display-layout".into())
+        .spawn(move || {
+            let _ = sender.send(job());
+        })
+        .map_err(|e| DisplayError::failed("could not start the display layout", e))?;
+    receiver.recv_timeout(LAYOUT_TIMEOUT).unwrap_or_else(|_| {
+        tracing::warn!("Windows did not finish arranging the virtual display in time");
+        Err(DisplayError::Failed("Windows stopped responding while arranging the virtual display".into()))
+    })
+}
+
+/// One DeviceIoControl's overlapped block and buffers, which the driver owns until it completes.
+struct Request {
+    overlapped: OVERLAPPED,
+    input: [u8; 32],
+    output: u32,
+}
+
 /// Overlapped handle to the VDD adapter. DeviceIoControl is safe to call from several threads as
 /// long as each call brings its own OVERLAPPED, which [`Device::ioctl`] does.
 struct Device(HANDLE);
@@ -274,12 +338,15 @@ impl Device {
 
     /// Sends one control code with up to 32 bytes of input and returns the driver's 32-bit answer.
     fn ioctl(&self, code: u32, input: &[u8]) -> Result<u32, DisplayError> {
-        let mut in_buffer = [0u8; 32];
-        in_buffer[..input.len()].copy_from_slice(input);
-        let mut out_buffer = 0u32;
         let event = unsafe { CreateEventW(None, true, false, PCWSTR::null()) }
             .map_err(|e| DisplayError::failed("CreateEvent", e))?;
-        let mut overlapped = OVERLAPPED { hEvent: event, ..Default::default() };
+        // On the heap: a request the driver never finishes keeps it (see below).
+        let mut io = Box::new(Request {
+            overlapped: OVERLAPPED { hEvent: event, ..Default::default() },
+            input: [0; 32],
+            output: 0,
+        });
+        io.input[..input.len()].copy_from_slice(input);
         let mut transferred = 0u32;
 
         // Overlapped calls normally report ERROR_IO_PENDING here; the real outcome comes from the wait.
@@ -287,26 +354,33 @@ impl Device {
             DeviceIoControl(
                 self.0,
                 code,
-                Some(in_buffer.as_ptr().cast()),
-                in_buffer.len() as u32,
-                Some((&raw mut out_buffer).cast()),
+                Some(io.input.as_ptr().cast()),
+                io.input.len() as u32,
+                Some((&raw mut io.output).cast()),
                 size_of::<u32>() as u32,
                 None,
-                Some(&mut overlapped),
+                Some(&mut io.overlapped),
             )
         };
-        let result = unsafe { GetOverlappedResultEx(self.0, &overlapped, &mut transferred, IOCTL_TIMEOUT_MS, false) };
+        let result =
+            unsafe { GetOverlappedResultEx(self.0, &io.overlapped, &mut transferred, IOCTL_TIMEOUT_MS, false) };
         if result.is_err() {
-            // The driver may still write into our buffers; cancel and wait for it to let go of them.
+            // The driver may still write into the buffers: cancel, and give it a moment to let go.
             unsafe {
-                let _ = CancelIoEx(self.0, Some(&overlapped));
-                let _ = GetOverlappedResult(self.0, &overlapped, &mut transferred, true);
+                let _ = CancelIoEx(self.0, Some(&io.overlapped));
+                let _ = GetOverlappedResultEx(self.0, &io.overlapped, &mut transferred, CANCEL_TIMEOUT_MS, false);
+            }
+            // HasOverlappedIoCompleted. A crashed driver may never answer: leave it the request's memory
+            // rather than wait forever (which would freeze the switch, and quitting with it).
+            if unsafe { std::ptr::read_volatile(&io.overlapped.Internal) } == STATUS_PENDING.0 as usize {
+                Box::leak(io);
+                return Err(DisplayError::Failed("the virtual display driver stopped responding".into()));
             }
         }
         unsafe {
             let _ = CloseHandle(event);
         }
-        result.map(|()| out_buffer).map_err(|e| DisplayError::failed("virtual display driver did not respond", e))
+        result.map(|()| io.output).map_err(|e| DisplayError::failed("virtual display driver did not respond", e))
     }
 }
 
@@ -336,37 +410,55 @@ impl Drop for DevInfoSet {
     }
 }
 
-/// Finds the `Root\Parsec\VDA` device node among display adapters and reports whether it is usable.
-fn query_status() -> DriverStatus {
-    let Ok(set) = DevInfoSet::new(&DISPLAY_CLASS_GUID, DIGCF_PRESENT) else {
-        return DriverStatus::NotInstalled;
-    };
+/// Runs `inspect` on the `Root\Parsec\VDA` device node among the display adapters, if there is one.
+fn with_adapter<T>(inspect: impl FnOnce(&DevInfoSet, &SP_DEVINFO_DATA) -> T) -> Option<T> {
+    let set = DevInfoSet::new(&DISPLAY_CLASS_GUID, DIGCF_PRESENT).ok()?;
     let mut info = SP_DEVINFO_DATA { cbSize: size_of::<SP_DEVINFO_DATA>() as u32, ..Default::default() };
     for i in 0.. {
         if unsafe { SetupDiEnumDeviceInfo(set.0, i, &mut info) }.is_err() {
             break;
         }
-        if !hardware_ids(&set, &info).iter().any(|id| id.eq_ignore_ascii_case(HARDWARE_ID)) {
-            continue;
+        if hardware_ids(&set, &info).iter().any(|id| id.eq_ignore_ascii_case(HARDWARE_ID)) {
+            return Some(inspect(&set, &info));
         }
-        let mut status = CM_DEVNODE_STATUS_FLAGS(0);
-        let mut problem = CM_PROB(0);
-        if unsafe { CM_Get_DevNode_Status(&mut status, &mut problem, info.DevInst, 0) } != CR_SUCCESS {
-            return DriverStatus::Broken;
-        }
-        return if status.0 & (DN_DRIVER_LOADED.0 | DN_STARTED.0) != 0 {
-            DriverStatus::Ready
-        } else if status.0 & DN_HAS_PROBLEM.0 != 0 {
-            match problem {
-                CM_PROB_NEED_RESTART => DriverStatus::RestartRequired,
-                CM_PROB_DISABLED | CM_PROB_HARDWARE_DISABLED => DriverStatus::Disabled,
-                _ => DriverStatus::Broken,
-            }
-        } else {
-            DriverStatus::Broken
-        };
     }
-    DriverStatus::NotInstalled
+    None
+}
+
+/// Device instance ID of the adapter (e.g. `ROOT\DISPLAY\0002`), as pnputil wants it.
+fn adapter_instance_id() -> Option<String> {
+    with_adapter(|set, info| {
+        let mut id = [0u16; 512];
+        unsafe { SetupDiGetDeviceInstanceIdW(set.0, info, Some(&mut id), None) }.ok()?;
+        let len = id.iter().position(|&c| c == 0).unwrap_or(id.len());
+        Some(String::from_utf16_lossy(&id[..len]))
+    })
+    .flatten()
+}
+
+/// Whether the adapter is installed and usable.
+fn query_status() -> DriverStatus {
+    with_adapter(|_, info| adapter_status(info)).unwrap_or(DriverStatus::NotInstalled)
+}
+
+fn adapter_status(info: &SP_DEVINFO_DATA) -> DriverStatus {
+    let mut status = CM_DEVNODE_STATUS_FLAGS(0);
+    let mut problem = CM_PROB(0);
+    if unsafe { CM_Get_DevNode_Status(&mut status, &mut problem, info.DevInst, 0) } != CR_SUCCESS {
+        return DriverStatus::Broken;
+    }
+    if status.0 & (DN_DRIVER_LOADED.0 | DN_STARTED.0) != 0 {
+        DriverStatus::Ready
+    } else if status.0 & DN_HAS_PROBLEM.0 != 0 {
+        match problem {
+            CM_PROB_NEED_RESTART => DriverStatus::RestartRequired,
+            CM_PROB_DISABLED | CM_PROB_HARDWARE_DISABLED => DriverStatus::Disabled,
+            // Code 43 among others: the driver crashed and Windows stopped the device.
+            _ => DriverStatus::Broken,
+        }
+    } else {
+        DriverStatus::Broken
+    }
 }
 
 fn hardware_ids(set: &DevInfoSet, info: &SP_DEVINFO_DATA) -> Vec<String> {
@@ -433,7 +525,7 @@ fn run_elevated(exe: &Path, args: &str) -> Result<u32, DisplayError> {
         return Err(if err.code() == ERROR_CANCELLED.to_hresult() {
             DisplayError::Failed("the administrator prompt was dismissed".into())
         } else {
-            DisplayError::failed("could not start the driver installer", err)
+            DisplayError::failed("could not run it as administrator", err)
         });
     }
     let process = info.hProcess;
@@ -443,7 +535,7 @@ fn run_elevated(exe: &Path, args: &str) -> Result<u32, DisplayError> {
         let read = GetExitCodeProcess(process, &mut code);
         let _ = CloseHandle(process);
         if waited != WAIT_OBJECT_0 || read.is_err() {
-            return Err(DisplayError::Failed("lost track of the driver installer".into()));
+            return Err(DisplayError::Failed("lost track of the elevated process".into()));
         }
     }
     Ok(code)
@@ -526,6 +618,7 @@ mod tests {
     #[test]
     #[ignore = "needs the Parsec driver; resizes a real virtual display a dozen times"]
     fn every_offered_mode_applies_to_the_live_display() {
+        let _ = tracing_subscriber::fmt().with_test_writer().with_max_level(tracing::Level::DEBUG).try_init();
         let mut vdd = ParsecVdd::new();
         let first = vdd.connect(DisplayMode::DEFAULT).expect("connect");
         let corner = (first.x, first.y + first.height as i32);
@@ -544,8 +637,13 @@ mod tests {
             assert_eq!((info.width, info.height), (mode.width, mode.height));
             assert_eq!((info.x, info.y + info.height as i32), corner, "the display left the corner");
         }
+        let started = std::time::Instant::now();
+        println!("back to the default…");
         vdd.set_mode(DisplayMode::DEFAULT).expect("back to the default");
+        println!("back to the default in {:.2?}; disconnecting…", started.elapsed());
+        let started = std::time::Instant::now();
         vdd.disconnect();
+        println!("disconnected in {:.2?}", started.elapsed());
     }
 
     /// Acceptance check for phase F1: on in ≤ 3 s, off in ≤ 2 s, 20 cycles without disturbing the

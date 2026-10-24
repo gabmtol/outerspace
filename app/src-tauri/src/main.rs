@@ -33,6 +33,7 @@ fn main() {
             commands::set_power,
             commands::set_resolution,
             commands::install_driver,
+            commands::restart_driver,
             commands::set_autostart,
             commands::client_snippets,
             commands::add_client,

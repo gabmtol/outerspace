@@ -40,12 +40,16 @@
     "driverDisabledDetail": "Enable \"Parsec Virtual Display Adapter\" in Device Manager, then try again.",
     "restartRequired": "Restart required",
     "restartRequiredDetail": "Windows needs a restart to finish installing the driver.",
+    "driverFailed": "Driver stopped working",
+    "driverFailedDetail": "The Parsec display driver crashed and Windows switched it off. Restarting it asks for administrator permission.",
     "connectFailed": "Couldn't connect the display",
     "installFailed": "Driver installation failed"
   },
   "actions": {
     "installDriver": "Install driver",
     "installing": "Installing…",
+    "restartDriver": "Restart driver",
+    "restartingDriver": "Restarting…",
     "retry": "Try again",
     "viewLog": "View log"
   },

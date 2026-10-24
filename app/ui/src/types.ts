@@ -18,6 +18,7 @@ export type ErrorCode =
   | "driverMissing"
   | "driverDisabled"
   | "restartRequired"
+  | "driverFailed"
   | "connectFailed"
   | "installFailed";
 

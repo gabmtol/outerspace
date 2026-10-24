@@ -22,6 +22,7 @@ const resolutionRow = $("#resolution-row");
 const resolution = $<HTMLSelectElement>("#resolution");
 const powerActions = $("#power-actions");
 const installButton = $<HTMLButtonElement>("#btn-install");
+const restartDriverButton = $<HTMLButtonElement>("#btn-restart-driver");
 const retryButton = $<HTMLButtonElement>("#btn-retry");
 const autostart = $<HTMLInputElement>("#autostart");
 const manual = $("#manual");
@@ -38,6 +39,7 @@ const ERROR_TEXT: Record<ErrorCode, [title: string, detail?: string]> = {
   driverMissing: ["errors.driverMissing", "errors.driverMissingDetail"],
   driverDisabled: ["errors.driverDisabled", "errors.driverDisabledDetail"],
   restartRequired: ["errors.restartRequired", "errors.restartRequiredDetail"],
+  driverFailed: ["errors.driverFailed", "errors.driverFailedDetail"],
   connectFailed: ["errors.connectFailed"],
   installFailed: ["errors.installFailed"],
 };
@@ -75,7 +77,12 @@ function render(status: Status): void {
       const [title, more] = ERROR_TEXT[power.code];
       statusText.textContent = t(title);
       detail = more ? t(more) : (power.message ?? "");
-      actions = power.code === "driverMissing" || power.code === "installFailed" ? [installButton] : [retryButton];
+      actions =
+        power.code === "driverMissing" || power.code === "installFailed"
+          ? [installButton]
+          : power.code === "driverFailed"
+            ? [restartDriverButton]
+            : [retryButton];
       break;
     }
   }
@@ -94,7 +101,9 @@ function render(status: Status): void {
 
   installButton.disabled = status.installing;
   installButton.textContent = t(status.installing ? "actions.installing" : "actions.installDriver");
-  for (const button of [installButton, retryButton]) button.hidden = !actions.includes(button);
+  restartDriverButton.disabled = status.installing;
+  restartDriverButton.textContent = t(status.installing ? "actions.restartingDriver" : "actions.restartDriver");
+  for (const button of [installButton, restartDriverButton, retryButton]) button.hidden = !actions.includes(button);
   powerActions.hidden = actions.length === 0;
 
   $("#server-caption").textContent = t("server.caption", { port: status.port });
@@ -200,6 +209,11 @@ resolution.addEventListener("change", async () => {
 
 installButton.addEventListener("click", async () => {
   const status = await run<Status>("install_driver");
+  if (status) render(status);
+});
+
+restartDriverButton.addEventListener("click", async () => {
+  const status = await run<Status>("restart_driver");
   if (status) render(status);
 });
 

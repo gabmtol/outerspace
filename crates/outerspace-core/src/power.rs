@@ -29,6 +29,8 @@ pub enum ErrorCode {
     DriverMissing,
     DriverDisabled,
     RestartRequired,
+    /// The driver crashed and Windows stopped the device; restarting it brings it back.
+    DriverFailed,
     ConnectFailed,
     InstallFailed,
 }
@@ -90,9 +92,20 @@ impl PowerController {
         if let PowerState::On { display } = self.state()
             && (display.width, display.height) != (mode.width, mode.height)
         {
-            let display = backend.set_mode(mode)?;
-            *lock(&self.mode) = mode;
-            return Ok(self.set(PowerState::On { display }));
+            return match backend.set_mode(mode) {
+                Ok(display) => {
+                    *lock(&self.mode) = mode;
+                    Ok(self.set(PowerState::On { display }))
+                }
+                Err(err) => {
+                    // A change the driver did not survive took the display with it.
+                    if let Some(problem) = driver_problem(backend.driver_status()) {
+                        backend.disconnect();
+                        self.set(problem);
+                    }
+                    Err(err)
+                }
+            };
         }
         *lock(&self.mode) = mode;
         Ok(self.state())
@@ -135,6 +148,19 @@ impl PowerController {
         }
     }
 
+    /// Restarts a crashed driver (UAC prompt) and, if it comes back, turns the display on.
+    pub fn restart_driver(&self) -> PowerState {
+        let mut backend = lock(&self.backend);
+        if let Err(err) = backend.restart_driver() {
+            tracing::warn!(%err, "driver restart failed");
+            return self.set(PowerState::Error { code: ErrorCode::DriverFailed, message: Some(err.to_string()) });
+        }
+        match driver_problem(backend.driver_status()) {
+            Some(problem) => self.set(problem),
+            None => self.connect(&mut backend),
+        }
+    }
+
     fn connect(&self, backend: &mut MutexGuard<'_, Box<dyn VirtualDisplayBackend>>) -> PowerState {
         self.set(PowerState::Starting);
         match backend.connect(self.mode()) {
@@ -162,12 +188,7 @@ fn driver_problem(status: DriverStatus) -> Option<PowerState> {
         DriverStatus::NotInstalled => ErrorCode::DriverMissing,
         DriverStatus::Disabled => ErrorCode::DriverDisabled,
         DriverStatus::RestartRequired => ErrorCode::RestartRequired,
-        DriverStatus::Broken => {
-            return Some(PowerState::Error {
-                code: ErrorCode::ConnectFailed,
-                message: Some("The virtual display driver reported a problem. Reinstalling it usually helps.".into()),
-            });
-        }
+        DriverStatus::Broken => ErrorCode::DriverFailed,
     };
     Some(PowerState::Error { code, message: None })
 }
@@ -187,11 +208,18 @@ mod tests {
         status: DriverStatus,
         status_after_install: DriverStatus,
         fail_connect: bool,
+        /// The driver dies on the next mode change, as the Parsec driver did in testing.
+        crash_on_set_mode: bool,
     }
 
     impl Fake {
         fn ready() -> Self {
-            Fake { status: DriverStatus::Ready, status_after_install: DriverStatus::Ready, fail_connect: false }
+            Fake {
+                status: DriverStatus::Ready,
+                status_after_install: DriverStatus::Ready,
+                fail_connect: false,
+                crash_on_set_mode: false,
+            }
         }
     }
 
@@ -215,6 +243,10 @@ mod tests {
         }
 
         fn set_mode(&mut self, mode: DisplayMode) -> Result<DisplayInfo, DisplayError> {
+            if self.crash_on_set_mode {
+                self.status = DriverStatus::Broken;
+                return Err(DisplayError::Failed("the virtual display driver stopped responding".into()));
+            }
             if self.fail_connect {
                 return Err(DisplayError::Failed("Windows rejected the display mode".into()));
             }
@@ -225,6 +257,12 @@ mod tests {
 
         fn install_driver(&mut self) -> Result<(), DisplayError> {
             self.status = self.status_after_install;
+            Ok(())
+        }
+
+        fn restart_driver(&mut self) -> Result<(), DisplayError> {
+            self.status = DriverStatus::Ready;
+            self.crash_on_set_mode = false;
             Ok(())
         }
     }
@@ -340,6 +378,17 @@ mod tests {
         assert!(power.set_mode(QHD).is_err());
         assert_eq!(power.mode(), DisplayMode::DEFAULT);
         assert_eq!(power.state(), PowerState::On { display: placed(DisplayMode::DEFAULT) });
+    }
+
+    #[test]
+    fn a_driver_that_dies_changing_mode_is_reported_and_restarted() {
+        let (power, seen) = controller(Fake { crash_on_set_mode: true, ..Fake::ready() });
+        power.turn_on();
+        assert!(power.set_mode(QHD).is_err());
+        assert_eq!(power.state(), PowerState::Error { code: ErrorCode::DriverFailed, message: None });
+        // Restarting brings the display back, in the mode that was still chosen.
+        assert_eq!(power.restart_driver(), PowerState::On { display: placed(DisplayMode::DEFAULT) });
+        assert_eq!(kinds(&seen.lock().unwrap()), ["starting", "on", "error", "starting", "on"]);
     }
 
     #[test]

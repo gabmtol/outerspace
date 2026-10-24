@@ -86,4 +86,7 @@ pub trait VirtualDisplayBackend: Send {
 
     /// Installs the driver (asks for elevation). Blocks until the installer exits.
     fn install_driver(&mut self) -> Result<(), DisplayError>;
+
+    /// Restarts a driver that crashed and was stopped by Windows (asks for elevation).
+    fn restart_driver(&mut self) -> Result<(), DisplayError>;
 }

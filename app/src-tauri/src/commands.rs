@@ -95,6 +95,22 @@ pub async fn install_driver(app: AppHandle) -> Result<Status, String> {
     Ok(snapshot(&app))
 }
 
+/// Restarts a crashed driver through a UAC prompt; shares the "installing" flag, which the UI
+/// shows as busy.
+#[tauri::command]
+pub async fn restart_driver(app: AppHandle) -> Result<Status, String> {
+    let state = app.state::<AppState>();
+    if state.installing.swap(true, Ordering::Relaxed) {
+        return Ok(snapshot(&app));
+    }
+    publish(&app);
+    let power = state.power.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || power.restart_driver()).await;
+    state.installing.store(false, Ordering::Relaxed);
+    publish(&app);
+    Ok(snapshot(&app))
+}
+
 /// Chooses the virtual display's resolution, remembered across restarts. A display that is on
 /// switches right away.
 #[tauri::command]
