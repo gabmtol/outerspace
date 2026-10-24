@@ -1,6 +1,9 @@
-use std::sync::Arc;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 
+use base64::Engine;
+use outerspace_core::apps::{Keeper, WindowInfo};
 use outerspace_core::setup::{self, Client, ClientInfo};
 use outerspace_core::{DisplayMode, MCP_PORT, PowerController, PowerState, apps, config, paths, system};
 use serde::Serialize;
@@ -11,6 +14,7 @@ use crate::tray;
 
 pub struct AppState {
     pub power: Arc<PowerController>,
+    pub keeper: Arc<Keeper>,
     pub installing: AtomicBool,
     /// Stops the MCP server on exit.
     pub mcp_stop: outerspace_mcp::CancellationToken,
@@ -28,22 +32,55 @@ pub struct Status {
     version: String,
     autostart: bool,
     transparency: bool,
-    /// Windows mostly on the virtual display, while it is on.
-    windows_on_display: Option<usize>,
+    /// Windows mostly on the virtual display, front to back (none while it is off).
+    windows: Vec<DisplayWindow>,
     /// The chosen resolution, and the ones to choose from.
     mode: DisplayMode,
     modes: Vec<DisplayMode>,
 }
 
+/// A window on the virtual display, as the UI lists it.
+#[derive(Clone, Serialize)]
+pub struct DisplayWindow {
+    hwnd: i64,
+    title: String,
+    process: String,
+    /// `data:` URL of its icon.
+    icon: Option<String>,
+}
+
+/// Icons by window, so the UI's refresh every few seconds doesn't draw them all again.
+static ICONS: LazyLock<Mutex<HashMap<i64, Option<String>>>> = LazyLock::new(Mutex::default);
+
+fn with_icons(windows: Vec<WindowInfo>) -> Vec<DisplayWindow> {
+    let mut icons = ICONS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    icons.retain(|hwnd, _| windows.iter().any(|w| w.hwnd == *hwnd));
+    windows
+        .into_iter()
+        .map(|w| DisplayWindow {
+            icon: icons
+                .entry(w.hwnd)
+                .or_insert_with(|| {
+                    let png = apps::icon_png(w.hwnd)?;
+                    Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(png)))
+                })
+                .clone(),
+            hwnd: w.hwnd,
+            title: w.title,
+            process: w.process,
+        })
+        .collect()
+}
+
 pub fn snapshot(app: &AppHandle) -> Status {
     let state = app.state::<AppState>();
     let power = state.power.state();
-    let windows_on_display = match &power {
+    let windows = match &power {
         PowerState::On { display } => {
             let rect = display.rect();
-            Some(apps::list().iter().filter(|w| w.rect.fraction_inside(&rect) > 0.5).count())
+            with_icons(apps::list().into_iter().filter(|w| w.rect.fraction_inside(&rect) > 0.5).collect())
         }
-        _ => None,
+        _ => Vec::new(),
     };
     Status {
         power,
@@ -52,7 +89,7 @@ pub fn snapshot(app: &AppHandle) -> Status {
         version: app.package_info().version.to_string(),
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
         transparency: system::transparency_enabled(),
-        windows_on_display,
+        windows,
         mode: state.power.mode(),
         modes: state.power.modes().to_vec(),
     }
@@ -70,9 +107,23 @@ pub async fn switch_power(app: &AppHandle, on: bool) {
     let _ = tauri::async_runtime::spawn_blocking(move || if on { power.turn_on() } else { power.turn_off() }).await;
 }
 
+/// Async so the window list and its icons are gathered off the UI thread.
 #[tauri::command]
-pub fn status(app: AppHandle) -> Status {
+pub async fn status(app: AppHandle) -> Status {
     snapshot(&app)
+}
+
+/// Moves a window off the virtual display onto the user's main monitor and brings it to the front:
+/// the user picked it in the window list.
+#[tauri::command]
+pub async fn bring_back(app: AppHandle, hwnd: i64) -> Result<Status, String> {
+    app.state::<AppState>().keeper.forget(hwnd);
+    tauri::async_runtime::spawn_blocking(move || apps::bring_back(hwnd, true))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    tracing::info!(hwnd, "window brought back to the main monitor");
+    Ok(snapshot(&app))
 }
 
 #[tauri::command]

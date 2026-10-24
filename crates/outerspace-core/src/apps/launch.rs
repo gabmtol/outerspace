@@ -48,6 +48,10 @@ pub struct Launched {
     pub pending: bool,
     /// The program grabbed the foreground anyway and OuterSpace handed it back to the user.
     pub focus_repaired: bool,
+    /// The window belongs to a process that was running before the launch: the program passed the
+    /// request on to it (Win11 Notepad, Windows Terminal, an open browser), and the window may be
+    /// one the user already had, with their own tabs or documents in it.
+    pub handed_off: bool,
 }
 
 /// Starts the program, waits for its first window, fills the virtual display (above its taskbar)
@@ -61,25 +65,28 @@ pub fn launch(request: &LaunchRequest, display: Rect) -> Result<Launched, AppErr
     // effect when we hold foreground rights ourselves — exactly the case where the program could
     // inherit them and steal the focus. The user pressing Alt or clicking lifts it anyway.
     let _lock = ForegroundLock::acquire();
+    let running: HashSet<u32> = process_parents().into_keys().collect();
     let pid = start(request, display)?;
     let exe = exe_stem(&request.program);
 
     let deadline = Instant::now() + request.wait;
-    let window = loop {
+    let (window, parents) = loop {
         let parents = process_parents();
         let found = top_level_windows()
             .into_iter()
             .filter(|h| !existing.contains(&(h.0 as isize)) && is_app_window(*h, false))
             .find(|&h| belongs_to(pid_of(h), pid, exe.as_deref(), &parents));
         if let Some(window) = found {
-            break window;
+            break (window, parents);
         }
         if Instant::now() >= deadline {
             tracing::info!(program = %request.program, ?pid, "launch: no window yet");
-            return Ok(Launched { pid, window: None, pending: true, focus_repaired: false });
+            return Ok(Launched { pid, window: None, pending: true, focus_repaired: false, handed_off: false });
         }
         std::thread::sleep(POLL);
     };
+    let owner = pid_of(window);
+    let handed_off = running.contains(&owner) && !pid.is_some_and(|started| descends_from(owner, started, &parents));
 
     let hwnd = window.0 as isize as super::Hwnd;
     let settled = Instant::now() + SETTLE;
@@ -91,8 +98,8 @@ pub fn launch(request: &LaunchRequest, display: Rect) -> Result<Launched, AppErr
     }
     let focus_repaired = hand_back_focus(user_foreground, window);
     let info = describe(window, unsafe { GetForegroundWindow() });
-    tracing::info!(program = %request.program, ?pid, hwnd, focus_repaired, "launched");
-    Ok(Launched { pid, window: Some(info), pending: false, focus_repaired })
+    tracing::info!(program = %request.program, ?pid, hwnd, owner, handed_off, focus_repaired, "launched");
+    Ok(Launched { pid, window: Some(info), pending: false, focus_repaired, handed_off })
 }
 
 fn start(request: &LaunchRequest, display: Rect) -> Result<Option<u32>, AppError> {
@@ -129,19 +136,24 @@ fn start(request: &LaunchRequest, display: Rect) -> Result<Option<u32>, AppError
 /// programs that hand off to another process (Win11 Notepad, a browser that is already open), if
 /// it runs the same executable.
 fn belongs_to(window_pid: u32, started: Option<u32>, exe: Option<&str>, parents: &HashMap<u32, u32>) -> bool {
-    if let Some(started) = started {
-        let mut pid = window_pid;
-        for _ in 0..16 {
-            if pid == started {
-                return true;
-            }
-            match parents.get(&pid) {
-                Some(&parent) if parent != 0 && parent != pid => pid = parent,
-                _ => break,
-            }
+    started.is_some_and(|started| descends_from(window_pid, started, parents))
+        || exe.is_some_and(|exe| {
+            process_name(window_pid).and_then(|name| exe_stem(&name)).is_some_and(|name| name == exe)
+        })
+}
+
+/// Whether `pid` is `ancestor` itself or one of its descendants.
+fn descends_from(mut pid: u32, ancestor: u32, parents: &HashMap<u32, u32>) -> bool {
+    for _ in 0..16 {
+        if pid == ancestor {
+            return true;
+        }
+        match parents.get(&pid) {
+            Some(&parent) if parent != 0 && parent != pid => pid = parent,
+            _ => return false,
         }
     }
-    exe.is_some_and(|exe| process_name(window_pid).and_then(|name| exe_stem(&name)).is_some_and(|name| name == exe))
+    false
 }
 
 fn process_parents() -> HashMap<u32, u32> {
@@ -247,5 +259,6 @@ mod tests {
         let parents = HashMap::from([(30, 20), (20, 10), (10, 4)]);
         assert!(belongs_to(30, Some(10), None, &parents));
         assert!(!belongs_to(30, Some(99), None, &parents));
+        assert!(descends_from(30, 10, &parents) && !descends_from(10, 30, &parents));
     }
 }

@@ -2,7 +2,7 @@ import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { applyI18n, t } from "./i18n";
-import type { ClientSnippet, ErrorCode, Status } from "./types";
+import type { ClientSnippet, DisplayWindow, ErrorCode, Status } from "./types";
 
 type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -18,6 +18,7 @@ const statusText = $("#status-text");
 const statusDetail = $("#status-detail");
 const detailLine = $("#detail-line");
 const peekButton = $<HTMLButtonElement>("#btn-peek");
+const dock = $("#dock");
 const resolutionRow = $("#resolution-row");
 const resolution = $<HTMLSelectElement>("#resolution");
 const powerActions = $("#power-actions");
@@ -32,6 +33,8 @@ const toast = $("#toast");
 let current: Status | undefined;
 /** Set while a resolution change is on its way, so status refreshes don't snap the menu back. */
 let changingResolution = false;
+/** What the dock shows, so refreshes only rebuild it when a window came, went or changed. */
+let dockKey = "";
 
 const modeKey = (mode: { width: number; height: number }) => `${mode.width}x${mode.height}`;
 
@@ -69,7 +72,7 @@ function render(status: Status): void {
       break;
     case "on": {
       statusText.textContent = t("power.on", { ...power.display });
-      const count = status.windowsOnDisplay ?? 0;
+      const count = status.windows.length;
       detail = count === 0 ? t("power.onDetail") : count === 1 ? t("power.oneWindow") : t("power.windows", { count });
       break;
     }
@@ -89,6 +92,7 @@ function render(status: Status): void {
   statusDetail.textContent = detail;
   peekButton.hidden = power.kind !== "on";
   detailLine.hidden = detail === "" && peekButton.hidden;
+  renderDock(power.kind === "on" ? status.windows : []);
 
   resolutionRow.hidden = power.kind === "error";
   if (resolution.options.length !== status.modes.length) {
@@ -109,6 +113,43 @@ function render(status: Status): void {
   $("#server-caption").textContent = t("server.caption", { port: status.port });
   $("#version").textContent = `v${status.version}`;
   autostart.checked = status.autostart;
+}
+
+/** The windows on the virtual display, as icons: clicking one moves it to the user's screen. */
+function renderDock(windows: DisplayWindow[]): void {
+  const key = JSON.stringify(windows.map((win) => [win.hwnd, win.title, win.icon !== null]));
+  if (key === dockKey) return;
+  dockKey = key;
+  dock.hidden = windows.length === 0;
+  dock.replaceChildren(
+    ...windows.map((win) => {
+      const name = win.title || win.process;
+      const button = document.createElement("button");
+      button.className = "dock-item";
+      button.title = t("dock.bringBack", { name });
+      button.setAttribute("aria-label", button.title);
+      if (win.icon) {
+        const icon = document.createElement("img");
+        icon.src = win.icon;
+        icon.alt = "";
+        button.append(icon);
+      } else {
+        button.textContent = (win.process || win.title || "?").charAt(0).toUpperCase();
+      }
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        const status = await run<Status>("bring_back", { hwnd: win.hwnd });
+        if (!status) {
+          button.disabled = false;
+          return;
+        }
+        const short = name.length > 40 ? `${name.slice(0, 39)}…` : name;
+        showToast(t("dock.broughtBack", { name: short }));
+        render(status);
+      });
+      return button;
+    }),
+  );
 }
 
 function showToast(message: string): void {

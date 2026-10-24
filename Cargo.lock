@@ -2568,6 +2568,7 @@ dependencies = [
 name = "outerspace"
 version = "0.1.1"
 dependencies = [
+ "base64 0.23.1",
  "outerspace-core",
  "outerspace-mcp",
  "serde",

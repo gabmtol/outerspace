@@ -29,6 +29,15 @@ export type PowerState =
   | { kind: "on"; display: DisplayInfo }
   | { kind: "error"; code: ErrorCode; message?: string };
 
+/** A window on the virtual display. */
+export interface DisplayWindow {
+  hwnd: number;
+  title: string;
+  process: string;
+  /** `data:` URL of its icon. */
+  icon: string | null;
+}
+
 export interface Status {
   power: PowerState;
   installing: boolean;
@@ -36,7 +45,8 @@ export interface Status {
   version: string;
   autostart: boolean;
   transparency: boolean;
-  windowsOnDisplay: number | null;
+  /** Windows on the virtual display, front to back (none while it is off). */
+  windows: DisplayWindow[];
   /** The chosen resolution, and the ones to choose from. */
   mode: DisplayMode;
   modes: DisplayMode[];

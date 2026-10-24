@@ -14,7 +14,7 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use outerspace_core::apps::Keeper;
-use outerspace_core::{PowerController, PowerState, paths};
+use outerspace_core::{PowerController, paths};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 pub use tokio_util::sync::CancellationToken;
@@ -22,20 +22,16 @@ pub use tokio_util::sync::CancellationToken;
 pub use tools::OuterSpace;
 
 /// Serves `http://127.0.0.1:{port}/mcp` (plus an unauthenticated `/health`) until `cancel` fires.
+/// `keeper` holds the agents' windows on the virtual display; the app shares it so the user can take
+/// one back.
 pub async fn run(
     power: Arc<PowerController>,
+    keeper: Arc<Keeper>,
     port: u16,
     token: String,
     cancel: CancellationToken,
 ) -> std::io::Result<()> {
     let log = Arc::new(log::ActionLog::open(&paths::logs_dir()));
-    let keeper = Arc::new(Keeper::start({
-        let power = power.clone();
-        move || match power.state() {
-            PowerState::On { display } => Some(display.rect()),
-            _ => None,
-        }
-    }));
     // Loopback Host headers only (the default) and no browser Origins at all: web pages must not be
     // able to drive the user's machine through this port.
     let mut config = StreamableHttpServerConfig::default().enforce_origin_validation();

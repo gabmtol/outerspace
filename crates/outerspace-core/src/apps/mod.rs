@@ -1,6 +1,7 @@
 //! Top-level windows: listing them, moving them onto the virtual display and closing them, without
 //! ever activating them. Launching lives in [`launch`].
 
+mod icon;
 mod keeper;
 mod launch;
 
@@ -11,7 +12,9 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
-use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONULL, MONITORINFO, MonitorFromPoint};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MONITOR_DEFAULTTONULL, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint,
+};
 use windows::Win32::System::Threading::{
     AttachThreadInput, GetCurrentThreadId, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
     PROCESS_TERMINATE, QueryFullProcessImageNameW, TerminateProcess,
@@ -24,6 +27,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::BOOL;
 
+pub use icon::icon_png;
 pub use keeper::Keeper;
 pub use launch::{LaunchRequest, Launched, launch};
 
@@ -79,6 +83,25 @@ pub fn work_area(display: Rect) -> Rect {
         return display;
     }
     to_rect(info.rcWork)
+}
+
+/// Gives a window back to the user: centers it on their main monitor, at its size or smaller.
+/// `activate` also brings it to the front — only when the user asked for it themselves.
+pub fn bring_back(hwnd: Hwnd, activate: bool) -> Result<Rect, AppError> {
+    dpi_aware();
+    let handle = handle(hwnd)?;
+    let monitor = unsafe { MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) };
+    let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..Default::default() };
+    if !unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool() {
+        return Err(AppError::Failed("could not find the main monitor".into()));
+    }
+    let (work, current) = (to_rect(info.rcWork), frame_rect(handle));
+    let (w, h) = (current.w.min(work.w), current.h.min(work.h));
+    let frame = set_frame(hwnd, Rect::new(work.x + (work.w - w) / 2, work.y + (work.h - h) / 2, w, h))?;
+    if activate {
+        give_foreground_to(handle);
+    }
+    Ok(frame)
 }
 
 /// Moves and resizes the window so its *visible* frame is exactly `frame`, without activating it.
@@ -217,6 +240,11 @@ fn pid_of(hwnd: HWND) -> u32 {
 
 /// File name of the process image, e.g. `Notepad.exe`.
 fn process_name(pid: u32) -> Option<String> {
+    let path = process_path(pid)?;
+    Path::new(&path).file_name().map(|name| name.to_string_lossy().into_owned())
+}
+
+fn process_path(pid: u32) -> Option<String> {
     let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
     let mut buffer = [0u16; 1024];
     let mut len = buffer.len() as u32;
@@ -227,8 +255,7 @@ fn process_name(pid: u32) -> Option<String> {
         let _ = CloseHandle(process);
     }
     result.ok()?;
-    let path = String::from_utf16_lossy(&buffer[..len as usize]);
-    Path::new(&path).file_name().map(|name| name.to_string_lossy().into_owned())
+    Some(String::from_utf16_lossy(&buffer[..len as usize]))
 }
 
 fn window_rect(hwnd: HWND) -> Rect {

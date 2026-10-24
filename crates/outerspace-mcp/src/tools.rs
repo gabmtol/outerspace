@@ -21,6 +21,10 @@ const OFF: &str = "OuterSpace is off, so the virtual display does not exist righ
                    turn it on (the switch in the OuterSpace window or its tray menu).";
 /// A window counts as "on the virtual display" when most of it is there.
 const ON_DISPLAY: f64 = 0.5;
+const HANDED_OFF: &str = "This window belongs to a copy of the program that was already running and took the launch \
+                          over, as Notepad, Windows Terminal and browsers do. It may be one of the user's own windows, \
+                          with their tabs or documents. Take a screenshot before typing: if it is not a fresh window, \
+                          leave it alone and give it back with `return_window`.";
 
 type ToolResult = Result<CallToolResult, ErrorData>;
 
@@ -201,6 +205,12 @@ pub struct MoveParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ReturnParams {
+    /// Window to give back (must be on the virtual display).
+    hwnd: i64,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CloseParams {
     /// Window to close (must be on the virtual display).
     hwnd: i64,
@@ -290,7 +300,8 @@ impl OuterSpace {
 
     #[tool(description = "Start a program on the virtual display. Its first window fills the display (above the \
                           taskbar) without taking focus from the user. Returns the window, or `pending: true` if \
-                          none appeared in time (check `list_windows` again).")]
+                          none appeared in time (check `list_windows` again). `handed_off: true` means a copy of \
+                          the program that was already running took over, and the window may be the user's.")]
     async fn launch(&self, Parameters(params): Parameters<LaunchParams>) -> ToolResult {
         let display = match self.display() {
             Ok(display) => display,
@@ -314,12 +325,17 @@ impl OuterSpace {
                     }
                     None => None,
                 };
-                json_result(json!({
+                let mut result = json!({
                     "pid": launched.pid,
                     "window": window.map(|w| AgentWindow::new(w, rect)),
                     "pending": launched.pending,
                     "focus_repaired": launched.focus_repaired,
-                }))
+                    "handed_off": launched.handed_off,
+                });
+                if launched.handed_off {
+                    result["note"] = json!(HANDED_OFF);
+                }
+                json_result(result)
             }
             Err(err) => self.fail("launch", args, err),
         }
@@ -455,6 +471,31 @@ impl OuterSpace {
         }
     }
 
+    #[tool(description = "Give a window back to the user: moves it from the virtual display to the middle of their \
+                          main monitor, where OuterSpace stops holding it, without taking their focus. Use it when \
+                          a window here is the user's own (see `handed_off` in `launch`) or the user asks for one.")]
+    async fn return_window(&self, Parameters(params): Parameters<ReturnParams>) -> ToolResult {
+        let display = match self.display() {
+            Ok(display) => display.rect(),
+            Err(off) => return Ok(off),
+        };
+        let args = json!({ "hwnd": params.hwnd });
+        let hwnd = params.hwnd;
+        match blocking(move || apps::describe_window(hwnd)).await? {
+            Ok(window) if window.rect.fraction_inside(&display) > ON_DISPLAY => {}
+            Ok(_) => return tool_error("that window is not on the virtual display"),
+            Err(err) => return self.fail("return_window", args, err),
+        }
+        self.keeper.forget(hwnd);
+        match blocking(move || apps::bring_back(hwnd, false)).await? {
+            Ok(_) => {
+                self.log.record("return_window", args, true, "");
+                json_result(json!({ "returned": true }))
+            }
+            Err(err) => self.fail("return_window", args, err),
+        }
+    }
+
     #[tool(description = "Click at a point on the virtual display (display coordinates). By default the click is \
                           delivered without touching the user's mouse. Take a screenshot afterwards to see the \
                           effect; if nothing happened, retry with input_mode \"borrow\".")]
@@ -576,7 +617,8 @@ impl OuterSpace {
                     `type_text`, `press_keys` and `scroll`: by default they reach the app without touching the \
                     user's mouse or keyboard; if a screenshot shows no effect, retry with input_mode \"borrow\", \
                     which briefly borrows the real cursor/keyboard once the user pauses. Never move or close the \
-                    user's own windows unless they ask you to."
+                    user's own windows unless they ask you to; if one ends up on the virtual display (`launch` \
+                    says `handed_off`), give it back with `return_window`."
 )]
 impl ServerHandler for OuterSpace {}
 

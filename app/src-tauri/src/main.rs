@@ -5,12 +5,15 @@ mod i18n;
 mod peek;
 mod tray;
 
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+use outerspace_core::apps::Keeper;
 use outerspace_core::display::parsec::ParsecVdd;
 use outerspace_core::input::fence::Fence;
-use outerspace_core::{MCP_PORT, PowerController, PowerState, config, paths};
+use outerspace_core::{MCP_PORT, PowerController, PowerState, config, paths, system};
 use outerspace_mcp::CancellationToken;
 use tauri::{Manager, RunEvent};
 use tracing_subscriber::EnvFilter;
@@ -20,7 +23,8 @@ const HIDDEN_ARG: &str = "--hidden";
 
 fn main() {
     let _log_guard = init_logging();
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), "OuterSpace starting");
+    keep_crash_reports();
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), pid = std::process::id(), "OuterSpace starting");
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_window(app)))
@@ -39,6 +43,7 @@ fn main() {
             commands::add_client,
             commands::open_logs,
             commands::open_peek,
+            commands::bring_back,
         ])
         .register_asynchronous_uri_scheme_protocol(peek::SCHEME, peek::serve)
         .setup(|app| {
@@ -56,17 +61,31 @@ fn main() {
             if let Err(err) = power.set_mode(settings.mode) {
                 tracing::warn!(%err, "saved resolution ignored");
             }
+            // Holds the agents' windows on the virtual display, until the user takes one back.
+            let keeper = Arc::new(Keeper::start({
+                let power = power.clone();
+                move || match power.state() {
+                    PowerState::On { display } => Some(display.rect()),
+                    _ => None,
+                }
+            }));
             let mcp_stop = CancellationToken::new();
             tauri::async_runtime::spawn({
-                let (power, stop) = (power.clone(), mcp_stop.clone());
+                let (power, keeper, stop) = (power.clone(), keeper.clone(), mcp_stop.clone());
                 let token = settings.token;
                 async move {
-                    if let Err(err) = outerspace_mcp::run(power, MCP_PORT, token, stop).await {
+                    if let Err(err) = outerspace_mcp::run(power, keeper, MCP_PORT, token, stop).await {
                         tracing::error!(%err, port = MCP_PORT, "MCP server could not run");
                     }
                 }
             });
-            app.manage(commands::AppState { power, installing: AtomicBool::new(false), mcp_stop, _fence: fence });
+            app.manage(commands::AppState {
+                power,
+                keeper,
+                installing: AtomicBool::new(false),
+                mcp_stop,
+                _fence: fence,
+            });
             tray::create(app.handle())?;
             if !std::env::args().any(|arg| arg == HIDDEN_ARG) {
                 tray::show_window(app.handle());
@@ -94,6 +113,28 @@ fn main() {
             tracing::info!("OuterSpace exiting");
         }
     });
+}
+
+/// Rust says why it panicked or aborted ("memory allocation of N bytes failed") on stderr, which a
+/// windowed app does not have: append it to `logs/stderr.log`, under a line with this run's pid (the
+/// main log has it too). Panics also go to the main log: one on a worker thread only stops that thread.
+fn keep_crash_reports() {
+    // Dev builds have a console.
+    if cfg!(not(debug_assertions)) {
+        let path = paths::logs_dir().join("stderr.log");
+        match OpenOptions::new().create(true).append(true).open(&path) {
+            Ok(mut file) => {
+                let _ = writeln!(file, "--- OuterSpace {} pid {}", env!("CARGO_PKG_VERSION"), std::process::id());
+                system::stderr_to(file);
+            }
+            Err(err) => tracing::warn!(?path, %err, "crash reports unavailable"),
+        }
+    }
+    let report = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!(%info, "panic");
+        report(info);
+    }));
 }
 
 /// `logs/outerspace.YYYY-MM-DD.log`, one file a day, the last week kept.

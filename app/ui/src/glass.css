@@ -61,6 +61,19 @@ main { flex: 1; padding: 4px 16px 0; display: flex; flex-direction: column; min-
 .detail { margin: 10px 0 0; font: var(--fs-caption); color: var(--text-secondary); display: flex; gap: 8px; align-items: baseline; }
 .detail[hidden] { display: none; }
 .detail .link { font-weight: 600; }
+/* Windows on the virtual display, like a small Dock: click one to move it to your screen. */
+.dock { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+.dock[hidden] { display: none; }
+.dock-item {
+  flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+  display: grid; place-items: center; background: var(--control-fill);
+  font: 700 12px/1 var(--font); color: var(--text-secondary);
+  transition: background-color var(--motion), transform var(--motion);
+}
+.dock-item:hover:not(:disabled) { background: var(--control-fill-hover); }
+.dock-item:active:not(:disabled) { transform: scale(0.92); }
+.dock-item:disabled { opacity: 0.5; }
+.dock-item img { width: 22px; height: 22px; }
 .setting {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--hairline);

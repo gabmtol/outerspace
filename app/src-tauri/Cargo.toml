@@ -15,6 +15,7 @@ outerspace-mcp = { path = "../../crates/outerspace-mcp" }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+base64 = "0.23.1"
 tauri = { version = "2.12.5", features = ["tray-icon", "image-png"] }
 tauri-plugin-autostart = "2.7.0"
 tauri-plugin-single-instance = "2.5.4"

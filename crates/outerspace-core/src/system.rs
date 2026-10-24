@@ -1,3 +1,7 @@
+use std::os::windows::io::IntoRawHandle;
+
+use windows::Win32::Foundation::HANDLE;
+use windows::Win32::System::Console::{STD_ERROR_HANDLE, SetStdHandle};
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext};
 use windows::core::w;
@@ -18,6 +22,12 @@ pub fn transparency_enabled() -> bool {
         )
     };
     result.is_err() || value != 0
+}
+
+/// Makes `file` this process's stderr for good. A windowed app has none, so otherwise the last words
+/// of a crash (a panic's message, or "memory allocation of N bytes failed" before an abort) are lost.
+pub fn stderr_to(file: std::fs::File) {
+    let _ = unsafe { SetStdHandle(STD_ERROR_HANDLE, HANDLE(file.into_raw_handle())) };
 }
 
 /// Window and screen coordinates from Win32 must be physical pixels whatever thread asks

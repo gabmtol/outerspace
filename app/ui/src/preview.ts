@@ -36,7 +36,13 @@ const status: Status = {
   version: "0.1.1",
   autostart: false,
   transparency: true,
-  windowsOnDisplay: params.get("state") === "on" ? 2 : null,
+  windows:
+    params.get("state") === "on"
+      ? [
+          { hwnd: 1, title: "Untitled - Notepad", process: "Notepad.exe", icon: null },
+          { hwnd: 2, title: "Example Domain - Microsoft Edge", process: "msedge.exe", icon: null },
+        ]
+      : [],
   mode: { width: 1920, height: 1080, hz: 60 },
   modes: [
     [1280, 720], [1280, 800], [1366, 768], [1440, 900], [1600, 900], [1680, 1050], [1920, 1080],
@@ -49,6 +55,7 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
     status.mode = { width: Number(args?.width), height: Number(args?.height), hz: 60 };
     if (status.power.kind === "on") status.power.display = { ...status.power.display, ...status.mode };
   }
+  if (cmd === "bring_back") status.windows = status.windows.filter((win) => win.hwnd !== args?.hwnd);
   const replies: Record<string, unknown> = { status, client_snippets: snippets };
   return (replies[cmd] ?? status) as T;
 }
