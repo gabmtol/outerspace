@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy — OuterSpace</title>
+  <meta name="description" content="OuterSpace collects no data. Everything it does stays on your PC.">
+  <link rel="icon" type="image/png" href="assets/icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="./"><img src="assets/icon.png" alt="" width="28" height="28">OuterSpace</a>
+    <nav>
+      <a href="./#how">How it works</a>
+      <a href="./#features">Features</a>
+      <a href="https://github.com/gabmtol/outerspace">GitHub</a>
+    </nav>
+  </header>
+
+  <main class="policy">
+    <h1>Privacy</h1>
+    <p class="updated">Last updated: October 24, 2026</p>
+
+    <p><strong>OuterSpace collects no data.</strong> It has no accounts, no analytics, no telemetry and no crash reporting. It does not send anything about you or your PC to its authors or to anyone else.</p>
+
+    <h2>What stays on your PC</h2>
+    <ul>
+      <li><strong>Settings and the access token</strong> are stored in <code>%LOCALAPPDATA%\com.gabmtol.outerspace\config.json</code>. The token protects the local MCP server; it never leaves your PC.</li>
+      <li><strong>Logs</strong> are stored in the <code>logs</code> folder next to it: an app log (kept for 7 days) and an action log listing what agents did — which tool, which program was launched, where they clicked. The text agents type is <em>not</em> logged, only its length. Screenshots are never saved to disk.</li>
+      <li>Uninstalling and choosing to delete app data removes all of it.</li>
+    </ul>
+
+    <h2>Network connections</h2>
+    <ul>
+      <li>The MCP server listens on <code>127.0.0.1</code> only, so it can't be reached from other computers, and it refuses requests from web pages.</li>
+      <li>OuterSpace connects to the internet in exactly one case: when you click <strong>Install driver</strong>, it downloads Parsec's official virtual display driver installer from <code>builds.parsec.app</code> and checks its SHA-256 before running it. That request goes to Parsec, under <a href="https://parsec.app/privacy">Parsec's privacy policy</a>.</li>
+    </ul>
+
+    <h2>Your AI agent</h2>
+    <p>OuterSpace gives the AI agent <em>you</em> connect (Claude Code, Codex CLI, OpenCode, or another MCP client) screenshots of the virtual display, the titles of windows on it, and the results of the actions it takes. What that agent does with them — including sending them to its provider's servers — is governed by that agent's and provider's own privacy policies, not by OuterSpace. Don't put anything on the virtual display that you wouldn't show your agent.</p>
+
+    <h2>This website</h2>
+    <p>This site is hosted on GitHub Pages and uses no cookies, analytics or third-party scripts. GitHub may log visitors' IP addresses for security, as described in the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>. Downloads are served by GitHub Releases.</p>
+
+    <h2>Contact</h2>
+    <p>Questions or concerns: <a href="https://github.com/gabmtol/outerspace/issues">open an issue on GitHub</a>.</p>
+  </main>
+
+  <footer class="footer">
+    <img src="assets/icon.png" alt="" width="20" height="20">
+    <span>OuterSpace · MIT License</span>
+    <a href="./">Home</a>
+    <a href="https://github.com/gabmtol/outerspace">Source</a>
+    <a href="https://github.com/gabmtol/outerspace/releases">Releases</a>
+  </footer>
+</body>
+</html>

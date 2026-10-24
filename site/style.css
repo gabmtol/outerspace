@@ -135,6 +135,15 @@ summary::after { content: "+"; color: var(--text-2); font-weight: 400; font-size
 details[open] summary::after { content: "−"; }
 details p { margin: 10px 0 0; color: var(--text-2); font-size: 15px; }
 
+/* ── policy page ──────────────────────────────────────────────── */
+.policy { max-width: 720px; padding-top: 64px; padding-bottom: 72px; }
+.policy h1 { font-size: clamp(36px, 5vw, 48px); font-weight: 800; letter-spacing: -0.03em; }
+.policy .updated { margin: 8px 0 32px; color: var(--text-2); font-size: 14px; }
+.policy h2 { margin: 40px 0 12px; font-size: 22px; text-align: left; letter-spacing: -0.01em; }
+.policy p, .policy li { font-size: 16px; color: var(--text); }
+.policy ul { padding-left: 20px; }
+.policy li + li { margin-top: 8px; }
+
 /* ── footer ───────────────────────────────────────────────────── */
 .footer {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 18px;
