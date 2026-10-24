@@ -1,27 +1,29 @@
 //! Finding a virtual display among the GDI outputs and placing it on the desktop, through the
 //! classic EnumDisplayDevices / ChangeDisplaySettingsEx API (works the same for any IddCx driver).
 
-use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
+use windows::Win32::Devices::Display::{SDC_APPLY, SDC_TOPOLOGY_EXTEND, SetDisplayConfig};
 use windows::Win32::Graphics::Gdi::{
     CDS_NORESET, CDS_TYPE, CDS_UPDATEREGISTRY, ChangeDisplaySettingsExW, DEVMODE_FIELD_FLAGS, DEVMODEW,
-    DISP_CHANGE_SUCCESSFUL, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICEW, DM_DISPLAYFREQUENCY, DM_PELSHEIGHT,
-    DM_PELSWIDTH, DM_POSITION, ENUM_CURRENT_SETTINGS, EnumDisplayDevicesW, EnumDisplaySettingsW,
+    DISP_CHANGE_SUCCESSFUL, DISPLAY_DEVICE_ACTIVE, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICEW,
+    DM_DISPLAYFREQUENCY, DM_PELSHEIGHT, DM_PELSWIDTH, DM_POSITION, ENUM_CURRENT_SETTINGS, EnumDisplayDevicesW,
+    EnumDisplaySettingsW,
 };
 use windows::core::{HSTRING, PCWSTR};
 
 use super::{DisplayError, DisplayInfo, DisplayMode};
 
-/// `StateFlags` of a monitor (child of an output): DISPLAY_DEVICE_ACTIVE | DISPLAY_DEVICE_ATTACHED.
-const MONITOR_PRESENT: u32 = 0x1 | 0x2;
 const POLL: Duration = Duration::from_millis(100);
+/// How long Windows gets to settle a new monitor on its own before we ask for "Extend".
+const SETTLE: Duration = Duration::from_millis(1500);
 
+/// A GDI source (`\\.\DISPLAYn`) and the monitors it drives.
 struct Output {
     name: String,
-    adapter: String,
     attached: bool,
-    has_monitor: bool,
+    /// Device IDs of the active monitors on this output; more than one means they mirror each other.
+    monitors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -47,15 +49,17 @@ fn outputs() -> Vec<Output> {
             break;
         }
         let name = from_wide(&device.DeviceName);
-        let mut monitor = DISPLAY_DEVICEW { cb: size_of::<DISPLAY_DEVICEW>() as u32, ..Default::default() };
-        let has_monitor = unsafe { EnumDisplayDevicesW(&HSTRING::from(&name), 0, &mut monitor, 0) }.as_bool()
-            && monitor.StateFlags.0 & MONITOR_PRESENT != 0;
-        list.push(Output {
-            name,
-            adapter: from_wide(&device.DeviceString),
-            attached: device.StateFlags.0 & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP.0 != 0,
-            has_monitor,
-        });
+        let mut monitors = Vec::new();
+        for j in 0.. {
+            let mut monitor = DISPLAY_DEVICEW { cb: size_of::<DISPLAY_DEVICEW>() as u32, ..Default::default() };
+            if !unsafe { EnumDisplayDevicesW(&HSTRING::from(&name), j, &mut monitor, 0) }.as_bool() {
+                break;
+            }
+            if monitor.StateFlags.0 & DISPLAY_DEVICE_ACTIVE.0 != 0 {
+                monitors.push(from_wide(&monitor.DeviceID));
+            }
+        }
+        list.push(Output { name, attached: device.StateFlags.0 & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP.0 != 0, monitors });
     }
     list
 }
@@ -75,22 +79,49 @@ fn current(name: &str) -> Option<Rect> {
     })
 }
 
-/// GDI names (`\\.\DISPLAYn`) of the outputs of `adapter` that currently have a monitor plugged in.
-pub fn outputs_with_monitor(adapter: &str) -> HashSet<String> {
-    outputs().into_iter().filter(|o| o.adapter == adapter && o.has_monitor).map(|o| o.name).collect()
-}
-
-/// Waits until `adapter` exposes an output with a monitor that was not in `before`.
-pub fn wait_for_new_output(adapter: &str, before: &HashSet<String>, timeout: Duration) -> Result<String, DisplayError> {
+/// Waits for the monitor whose device ID contains `monitor_id` to get its own part of the desktop and
+/// returns the GDI name of the output driving it.
+///
+/// Windows may bring a new monitor up mirrored onto an existing screen (the "Duplicate" projection
+/// mode, the default on some laptops) — useless here, since the user's screen would just be copied.
+/// If it is still mirrored or detached after [`SETTLE`], this switches Windows to "Extend", the same
+/// as Win+P → Extend.
+pub fn wait_for_extended(monitor_id: &str, timeout: Duration) -> Result<String, DisplayError> {
     let deadline = Instant::now() + timeout;
+    let mut first_seen: Option<Instant> = None;
+    let mut asked_to_extend = false;
     loop {
-        if let Some(name) = outputs_with_monitor(adapter).into_iter().find(|name| !before.contains(name)) {
-            return Ok(name);
+        let found = outputs().into_iter().find(|o| o.monitors.iter().any(|m| m.contains(monitor_id)));
+        if let Some(output) = found {
+            if output.attached && output.monitors.len() == 1 {
+                return Ok(output.name);
+            }
+            let seen = *first_seen.get_or_insert_with(Instant::now);
+            if !asked_to_extend && seen.elapsed() >= SETTLE {
+                tracing::info!(
+                    output = %output.name,
+                    attached = output.attached,
+                    mirrored = output.monitors.len() > 1,
+                    waited = ?seen.elapsed(),
+                    "switching Windows to Extend"
+                );
+                extend_desktop()?;
+                asked_to_extend = true;
+            }
         }
         if Instant::now() >= deadline {
-            return Err(DisplayError::Failed("Windows did not detect the virtual display in time".into()));
+            return Err(DisplayError::Failed("Windows did not set up the virtual display in time".into()));
         }
         std::thread::sleep(POLL);
+    }
+}
+
+fn extend_desktop() -> Result<(), DisplayError> {
+    let result = unsafe { SetDisplayConfig(None, None, SDC_APPLY | SDC_TOPOLOGY_EXTEND) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(DisplayError::Failed(format!("Windows refused to extend the desktop (error {result})")))
     }
 }
 
@@ -157,6 +188,45 @@ fn apply(name: &str, mode: DisplayMode, x: i32, y: i32, fields: DEVMODE_FIELD_FL
 fn from_wide(chars: &[u16]) -> String {
     let len = chars.iter().position(|&c| c == 0).unwrap_or(chars.len());
     String::from_utf16_lossy(&chars[..len])
+}
+
+/// Whether a monitor whose device ID contains `monitor_id` is active on any output.
+#[cfg(test)]
+pub(crate) fn monitor_active(monitor_id: &str) -> bool {
+    outputs().iter().any(|o| o.monitors.iter().any(|m| m.contains(monitor_id)))
+}
+
+/// Every GDI output with its flags, monitors and current mode — for the hardware probe tests.
+#[cfg(test)]
+pub(crate) fn dump() -> String {
+    let mut out = String::new();
+    for i in 0.. {
+        let mut device = DISPLAY_DEVICEW { cb: size_of::<DISPLAY_DEVICEW>() as u32, ..Default::default() };
+        if !unsafe { EnumDisplayDevicesW(PCWSTR::null(), i, &mut device, 0) }.as_bool() {
+            break;
+        }
+        let name = from_wide(&device.DeviceName);
+        out += &format!(
+            "{name}  '{}'  flags={:#x}  mode={:?}\n",
+            from_wide(&device.DeviceString),
+            device.StateFlags.0,
+            current(&name)
+        );
+        for j in 0.. {
+            let mut monitor = DISPLAY_DEVICEW { cb: size_of::<DISPLAY_DEVICEW>() as u32, ..Default::default() };
+            if !unsafe { EnumDisplayDevicesW(&HSTRING::from(&name), j, &mut monitor, 0) }.as_bool() {
+                break;
+            }
+            out += &format!(
+                "    monitor {}  '{}'  flags={:#x}  id={}\n",
+                from_wide(&monitor.DeviceName),
+                from_wide(&monitor.DeviceString),
+                monitor.StateFlags.0,
+                from_wide(&monitor.DeviceID)
+            );
+        }
+    }
+    out
 }
 
 #[cfg(test)]

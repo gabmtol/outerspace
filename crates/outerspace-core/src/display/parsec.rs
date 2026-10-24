@@ -61,8 +61,8 @@ const ADAPTER_GUID: GUID = GUID::from_u128(0x00b41627_04c4_429e_a26e_0265cf50c8f
 /// Display adapter device class, used to find the device node and its status.
 const DISPLAY_CLASS_GUID: GUID = GUID::from_u128(0x4d36e968_e325_11ce_bfc1_08002be10318);
 const HARDWARE_ID: &str = r"Root\Parsec\VDA";
-/// `DeviceString` of the GDI outputs this driver creates.
-const ADAPTER_NAME: &str = "Parsec Virtual Display Adapter";
+/// EDID product code of the monitors this driver plugs in (`MONITOR\PSCCDD0\...`).
+const MONITOR_ID: &str = "PSCCDD0";
 
 const IOCTL_ADD: u32 = 0x0022_e004;
 const IOCTL_REMOVE: u32 = 0x0022_a008;
@@ -72,7 +72,7 @@ const IOCTL_VERSION: u32 = 0x0022_e010;
 /// The driver unplugs every display after ~1 s without an update; ping well inside that.
 const PING_INTERVAL: Duration = Duration::from_millis(50);
 const IOCTL_TIMEOUT_MS: u32 = 5_000;
-const ATTACH_TIMEOUT: Duration = Duration::from_secs(8);
+const ATTACH_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Official installer (Authenticode-signed by Parsec Cloud, Inc.). Fallback if 0.45 misbehaves on a
 /// machine: parsec-vdd-0.41.0.0.exe, sha256 317977c5abd58f1c3f7b27ef7f96947efd07e6d35b27e415cea5daa6007629b1.
@@ -108,14 +108,17 @@ impl VirtualDisplayBackend for ParsecVdd {
         let device = Arc::new(Device::open()?);
         tracing::info!(minor_version = device.ioctl(IOCTL_VERSION, &[])?, "parsec vdd opened");
 
-        let before = layout::outputs_with_monitor(ADAPTER_NAME);
+        let started = std::time::Instant::now();
         let index = device.ioctl(IOCTL_ADD, &[])?;
         device.ioctl(IOCTL_UPDATE, &[])?;
+        tracing::debug!(elapsed = ?started.elapsed(), index, "display added");
         // From here on, dropping `session` unplugs the display again — including on the error paths below.
         let session = Session::start(device, index);
 
-        let name = layout::wait_for_new_output(ADAPTER_NAME, &before, ATTACH_TIMEOUT)?;
+        let name = layout::wait_for_extended(MONITOR_ID, ATTACH_TIMEOUT)?;
+        tracing::debug!(elapsed = ?started.elapsed(), %name, "display on the desktop");
         let info = layout::place_beside_desktop(&name, mode)?;
+        tracing::debug!(elapsed = ?started.elapsed(), "display placed");
         tracing::info!(?info, index, "virtual display connected");
         self.session = Some(session);
         Ok(info)
@@ -404,4 +407,115 @@ fn run_elevated(exe: &Path, args: &str) -> Result<u32, DisplayError> {
         }
     }
     Ok(code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `cargo test -p outerspace-core probe -- --ignored --nocapture`
+    #[test]
+    #[ignore = "needs the Parsec driver; plugs a real virtual display for a few seconds"]
+    fn probe_outputs_while_a_display_is_plugged() {
+        println!("driver status: {:?}", query_status());
+        let device = Arc::new(Device::open().expect("open adapter"));
+        println!("minor version: {}", device.ioctl(IOCTL_VERSION, &[]).unwrap());
+        println!("--- before\n{}", layout::dump());
+        let index = device.ioctl(IOCTL_ADD, &[]).expect("add");
+        device.ioctl(IOCTL_UPDATE, &[]).unwrap();
+        println!("added index {index}");
+        let session = Session::start(device, index);
+        for second in [1, 3, 6] {
+            std::thread::sleep(Duration::from_secs(if second == 1 { 1 } else { 3 }));
+            println!("--- after {second}s\n{}", layout::dump());
+        }
+        drop(session);
+        std::thread::sleep(Duration::from_secs(2));
+        println!("--- after removal\n{}", layout::dump());
+    }
+
+    /// Times the removal path: does IOCTL_REMOVE unplug the display while pings continue?
+    /// `cargo test -p outerspace-core probe_remove -- --ignored --nocapture`
+    #[test]
+    #[ignore = "needs the Parsec driver; plugs a real virtual display for a few seconds"]
+    fn probe_remove_timing() {
+        let device = Arc::new(Device::open().expect("open adapter"));
+        let index = device.ioctl(IOCTL_ADD, &[]).expect("add");
+        device.ioctl(IOCTL_UPDATE, &[]).unwrap();
+        let session = Session::start(device.clone(), index);
+        let started = std::time::Instant::now();
+        while !layout::monitor_active(MONITOR_ID) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        println!("index {index}: active after {:.2?}", started.elapsed());
+        std::thread::sleep(Duration::from_secs(1));
+
+        let started = std::time::Instant::now();
+        let reply = device.ioctl(IOCTL_REMOVE, &(index as u16).to_be_bytes());
+        println!("remove replied {reply:?} after {:.2?}", started.elapsed());
+        device.ioctl(IOCTL_UPDATE, &[]).unwrap();
+        while layout::monitor_active(MONITOR_ID) && started.elapsed() < Duration::from_secs(6) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        println!(
+            "still pinging; monitor active = {} after {:.2?}",
+            layout::monitor_active(MONITOR_ID),
+            started.elapsed()
+        );
+        drop(session);
+    }
+
+    /// `cargo test -p outerspace-core connect_ -- --ignored --nocapture`
+    #[test]
+    #[ignore = "needs the Parsec driver; extends the desktop for a few seconds"]
+    fn connect_extends_the_desktop_and_disconnect_removes_the_display() {
+        let mut vdd = ParsecVdd::new();
+        let info = vdd.connect(DisplayMode::DEFAULT).expect("connect");
+        println!("{info:?}\n{}", layout::dump());
+        assert_eq!((info.width, info.height), (1920, 1080));
+        std::thread::sleep(Duration::from_secs(3));
+        vdd.disconnect();
+        std::thread::sleep(Duration::from_secs(2));
+        let after = layout::dump();
+        println!("--- after disconnect\n{after}");
+        assert!(!after.contains(MONITOR_ID), "the virtual monitor is still there");
+    }
+
+    /// Acceptance check for phase F1: on in ≤ 3 s, off in ≤ 2 s, 20 cycles without disturbing the
+    /// user's monitors. `cargo test -p outerspace-core twenty_ -- --ignored --nocapture`
+    #[test]
+    #[ignore = "needs the Parsec driver; plugs and unplugs the display 20 times"]
+    fn twenty_cycles_are_fast_and_leave_the_desktop_as_it_was() {
+        let _ = tracing_subscriber::fmt().with_test_writer().with_max_level(tracing::Level::DEBUG).try_init();
+        let desktop = layout::dump();
+        let mut vdd = ParsecVdd::new();
+        for cycle in 1..=20 {
+            let started = std::time::Instant::now();
+            let info = vdd.connect(DisplayMode::DEFAULT).expect("connect");
+            let on = started.elapsed();
+            std::thread::sleep(Duration::from_secs(1));
+
+            let started = std::time::Instant::now();
+            vdd.disconnect();
+            while layout::monitor_active(MONITOR_ID) {
+                assert!(started.elapsed() < Duration::from_secs(5), "cycle {cycle}: the display did not go away");
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let off = started.elapsed();
+            // Windows keeps tidying up a little after the monitor is gone; the end state must match.
+            while layout::dump() != desktop {
+                assert!(
+                    started.elapsed() < Duration::from_secs(8),
+                    "cycle {cycle}: desktop did not return to how it was"
+                );
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            let settled = started.elapsed();
+            println!("cycle {cycle:2}: on {on:.2?} at ({}, {})  off {off:.2?}  settled {settled:.2?}", info.x, info.y);
+            assert!(on <= Duration::from_secs(3), "cycle {cycle}: turning on took {on:?}");
+            assert!(off <= Duration::from_secs(2), "cycle {cycle}: turning off took {off:?}");
+            // The driver needs a moment after a removal before the next add is quick again.
+            std::thread::sleep(Duration::from_secs(3));
+        }
+    }
 }

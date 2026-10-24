@@ -11,7 +11,7 @@
 
 ---
 
-> **Status:** em desenvolvimento. F0 (app na bandeja + UI) está pronta; o código da F1 (monitor virtual) está escrito e aguarda o primeiro teste com o driver instalado. Veja o [plano de implementação](docs/PLANO.md).
+> **Status:** em desenvolvimento. O app na bandeja já liga e desliga o monitor virtual (F0 e F1 prontas); as ferramentas MCP vêm a seguir. Veja o [plano de implementação](docs/PLANO.md).
 
 ## O que é
 
@@ -68,6 +68,7 @@ npm run tauri build      # instalador NSIS em target/release/bundle/nsis
 ```sh
 cargo test --workspace                                # testes (não precisam do driver)
 cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p outerspace-core -- --ignored --nocapture # testes de hardware: precisam do driver Parsec e plugam o monitor de verdade
 ```
 
 A UI também abre num navegador comum com dados de exemplo (`npm run dev` e depois `http://localhost:5173/?state=on`; outros estados: `off`, `starting`, `error&code=driverMissing`).
@@ -90,7 +91,7 @@ O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. 
 | Fase | Entrega | Status |
 |---|---|---|
 | F0 | Esqueleto Tauri 2 com bandeja e janela de vidro | ✅ |
-| F1 | Monitor virtual liga/desliga pelo switch | 🧪 código pronto, falta testar com o driver |
+| F1 | Monitor virtual liga/desliga pelo switch | ✅ liga em ~0,3 s, desliga em ~1,8 s |
 | F2 | Abrir/listar/mover janelas + screenshot + servidor MCP | |
 | F3 | Clique, teclado e scroll sem roubar cursor/foco; cerca de mouse | |
 | F4 | Shim stdio + setup de Claude Code, Codex e OpenCode | |
