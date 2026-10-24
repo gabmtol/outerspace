@@ -29,6 +29,7 @@ export interface Status {
   version: string;
   autostart: boolean;
   transparency: boolean;
+  windowsOnDisplay: number | null;
 }
 
 export interface ClientSnippet {

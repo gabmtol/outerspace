@@ -11,13 +11,13 @@
 
 ---
 
-> **Status:** em desenvolvimento. O app na bandeja liga o monitor virtual e serve MCP em `127.0.0.1:7342` com `status`, `launch`, `list_windows`, `screenshot`, `move_window`, `close_window`, `click`, `type_text`, `press_keys` e `scroll` (F0–F3). O shim stdio para os clientes (F4) vem a seguir. Veja o [plano de implementação](docs/PLANO.md).
+> **Status:** MVP funcionando (F0–F4), polimento final em andamento (F5). Agentes reais já usam o OuterSpace pelo Claude Code. Veja o [plano de implementação](docs/PLANO.md).
 
 ## O que é
 
 O OuterSpace cria um **monitor virtual de verdade** no Windows (um display que a GPU renderiza normalmente) e entrega ele a um agente de IA via **MCP**. O agente abre programas lá, tira screenshots, clica e digita — enquanto você continua usando o seu monitor sem perder o mouse, o teclado ou o foco.
 
-- **Fica na bandeja.** Você inicia uma vez e ele fica em segundo plano.
+- **Fica na bandeja.** Você inicia uma vez e ele fica em segundo plano (e o agente o abre sozinho quando precisa).
 - **Um switch.** Ligado: o monitor virtual aparece e o servidor MCP aceita chamadas. Desligado: o monitor some e tudo é bloqueado.
 - **Setup em um clique** para **Claude Code**, **Codex CLI** e **OpenCode** (ou qualquer cliente MCP).
 - **Sem problemas de GPU.** Como é um display ativo, Chrome, VS Code e apps DirectX renderizam como em qualquer monitor — diferente de janelas minimizadas ou desktops ocultos.
@@ -27,75 +27,85 @@ O OuterSpace cria um **monitor virtual de verdade** no Windows (um display que a
   <br><sub>Prévia da UI com dados de exemplo: desligado, ativo, driver ausente e ativo no tema escuro.</sub>
 </p>
 
-## Como vai funcionar
+## Instalar
+
+1. Rode `OuterSpace_0.1.0_x64-setup.exe` (gerado por `scripts/build-installer.ps1`, veja abaixo). Instala só para o seu usuário, em `%LOCALAPPDATA%\OuterSpace`, sem pedir administrador.
+2. Abra o OuterSpace e ligue o switch. Na primeira vez ele pede para instalar o driver de monitor virtual (**Parsec VDD**, assinado pela Parsec): baixa o instalador oficial, confere o SHA-256 e pede permissão de administrador uma única vez.
+3. Em **Connect an agent**, clique em **Add** no Claude Code, Codex ou OpenCode. Reinicie o cliente se ele estiver aberto.
+
+Pronto: peça ao agente algo como *"use o OuterSpace para abrir o Edge em example.com e me diga o que aparece"*.
+
+Os dados do app (token, configurações, logs) ficam em `%LOCALAPPDATA%\com.gabmtol.outerspace`.
+
+## Como funciona
 
 ```
 Claude Code ─┐
-Codex CLI  ──┼─ stdio ─▶ outerspace-mcp.exe ─ HTTP local ─▶ OuterSpace.exe (bandeja)
-OpenCode   ──┘                                               ├─ monitor virtual (driver IddCx)
-                                                             ├─ abrir/mover janelas sem roubar foco
-                                                             ├─ screenshot (Windows.Graphics.Capture)
-                                                             └─ clique/teclado sem mover seu cursor
+Codex CLI  ──┼─ stdio ─▶ outerspace-mcp.exe ─ HTTP local + token ─▶ OuterSpace.exe (bandeja)
+OpenCode   ──┘          (abre o app se preciso)                     ├─ monitor virtual (driver IddCx)
+                                                                    ├─ abre/move janelas sem roubar foco
+                                                                    ├─ screenshot do monitor virtual
+                                                                    └─ clique/teclado sem mover seu cursor
 ```
 
-Ferramentas MCP do MVP: `status`, `launch`, `list_windows`, `screenshot`, `click`, `type_text`, `press_keys`, `scroll`, `move_window`, `close_window`. Detalhes, decisões técnicas e limitações conhecidas estão no [plano](docs/PLANO.md).
+Ferramentas MCP: `status`, `launch`, `list_windows`, `screenshot`, `click`, `type_text`, `press_keys`, `scroll`, `move_window`, `close_window`. Detalhes, decisões técnicas, resultados medidos e limitações conhecidas estão no [plano](docs/PLANO.md).
 
-O monitor virtual usa o driver **Parsec VDD** (IddCx, assinado pela Parsec). O OuterSpace não embute o driver: no primeiro uso ele baixa o instalador oficial, confere o SHA-256 e pede permissão de administrador uma única vez.
-
-## Conectar um agente (quando o MVP sair)
+Configuração manual (o botão **Add** faz isso por você):
 
 ```sh
 # Claude Code
-claude mcp add --transport stdio --scope user outerspace -- "%LOCALAPPDATA%\Programs\OuterSpace\outerspace-mcp.exe"
+claude mcp add --transport stdio --scope user outerspace -- "%LOCALAPPDATA%\OuterSpace\outerspace-mcp.exe"
 
-# Codex CLI
-codex mcp add outerspace -- "%LOCALAPPDATA%\Programs\OuterSpace\outerspace-mcp.exe"
+# Codex CLI (o app também ajusta startup_timeout_sec = 20 no config.toml)
+codex mcp add outerspace -- "%LOCALAPPDATA%\OuterSpace\outerspace-mcp.exe"
 ```
 
-OpenCode é configurado pelo próprio app em `opencode.json` (veja §7 do plano).
+OpenCode: o app edita o seu `opencode.jsonc`/`opencode.json` preservando comentários (veja §7 do plano). Qualquer outro cliente MCP pode usar o `outerspace-mcp.exe` por stdio, ou falar direto com `http://127.0.0.1:7342/mcp` com o cabeçalho `Authorization: Bearer <token>` (o token está em `config.json` na pasta de dados).
 
 ## Desenvolvimento
 
-Requisitos: Windows 11, Rust 1.85+ (MSVC), Node 20.19+, WebView2 (já vem no Windows 11).
+Requisitos: Windows 11, Rust 1.88+ (MSVC), Node 20.19+, WebView2 (já vem no Windows 11).
 
 ```sh
 cd app
 npm install
-npm run tauri dev        # app com recarga ao vivo da UI
-npm run tauri build      # instalador NSIS em target/release/bundle/nsis
+npm run tauri dev                 # app com recarga ao vivo da UI
+
+# instalador (app em release + outerspace-mcp.exe ao lado), em target/release/bundle/nsis
+powershell -ExecutionPolicy Bypass -File scripts/build-installer.ps1
 ```
 
 ```sh
-cargo test --workspace                                # testes (não precisam do driver)
+cargo test --workspace                                 # testes (não precisam do driver)
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p outerspace-core -- --ignored --nocapture # testes de hardware: precisam do driver Parsec e plugam o monitor de verdade
 ```
 
-Teste ponta a ponta pelo MCP, como um agente usaria (com o app aberto e o monitor ligado):
+Testes ponta a ponta com o SDK oficial de MCP:
 
 ```sh
 cd tests/mcp
 npm install
-npm run smoke            # ou: node smoke.mjs --apps  (também abre Edge, Firefox e VS Code)
+node shim.mjs            # pelo outerspace-mcp.exe, como os clientes usam (abre o app se estiver fechado)
+npm run smoke            # direto no HTTP, com o monitor ligado; --apps abre Edge, Firefox e VS Code
 node smoke.mjs --input   # clique/digitação/teclas/scroll no Edge em modo post
 ```
-
-Enquanto o shim stdio (F4) não sai, dá para conectar um cliente MCP direto por HTTP: `http://127.0.0.1:7342/mcp` com o cabeçalho `Authorization: Bearer <token>` (o token está em `%LOCALAPPDATA%\OuterSpace\config.json`).
 
 A UI também abre num navegador comum com dados de exemplo (`npm run dev` e depois `http://localhost:5173/?state=on`; outros estados: `off`, `starting`, `error&code=driverMissing`).
 
 | Pasta | O que tem |
 |---|---|
-| `crates/outerspace-core` | Lógica sem UI: estado liga/desliga, backend do driver (trait `VirtualDisplayBackend`), janelas (`apps`), captura de tela |
+| `crates/outerspace-core` | Lógica sem UI: liga/desliga, driver (trait `VirtualDisplayBackend`), janelas, captura, entrada, setup dos clientes |
 | `crates/outerspace-mcp` | Servidor MCP (rmcp) com as ferramentas, token e log de ações |
-| `tests/mcp` | Teste ponta a ponta com o SDK oficial de MCP |
+| `crates/outerspace-shim` | `outerspace-mcp.exe`: ponte stdio ⇄ HTTP que os clientes executam |
 | `app/src-tauri` | App Tauri: bandeja, janela, comandos |
 | `app/ui` | Interface (Vite + TypeScript, textos em `src/i18n/en.json`) |
-| `assets/icon`, `scripts` | Ícone (gerado por `scripts/gen-app-icon.mjs`, empacotado por `scripts/build-icons.ps1`) |
+| `tests/mcp` | Testes ponta a ponta com o SDK oficial de MCP |
+| `assets/icon`, `scripts` | Ícone (gerado por `scripts/gen-app-icon.mjs`, empacotado por `scripts/build-icons.ps1`) e o build do instalador |
 
 ## Design
 
-A UI e o ícone seguem o **Liquid Glass do macOS 27 Golden Gate**: vidro refinado com refração uniforme, contraste priorizando legibilidade, cantos consistentes, toolbar unificada e ícone em camadas com profundidade. O acento é o laranja "International Orange" da ponte. Tokens e regras estão em §6.3 do plano. A UI é em inglês por padrão.
+A UI e o ícone seguem o **Liquid Glass do macOS 27 Golden Gate**: vidro refinado com refração uniforme, contraste priorizando legibilidade (texto secundário ≥ 4,5:1 mesmo sobre papéis de parede extremos), cantos consistentes, toolbar unificada e ícone em camadas com profundidade. O acento é o laranja "International Orange" da ponte. Tokens e regras estão em §6.3 do plano. A UI é em inglês por padrão.
 
 O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. Na bandeja, a tela de trás muda de cor com o estado (laranja ligado, cinza desligado, vermelho com erro). Os candidatos descartados estão em `assets/icon/minimal/` e `assets/icon/variants/`.
 
@@ -107,8 +117,8 @@ O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. 
 | F1 | Monitor virtual liga/desliga pelo switch | ✅ liga em ~0,3 s, desliga em ~1,8 s |
 | F2 | Abrir/listar/mover janelas + screenshot + servidor MCP | ✅ testado com Bloco de Notas, Edge, Firefox e VS Code |
 | F3 | Clique, teclado e scroll sem roubar cursor/foco; cerca de mouse | ✅ post (Win32 e Chromium) e borrow verificados |
-| F4 | Shim stdio + setup de Claude Code, Codex e OpenCode | |
-| F5 | Polimento visual, instalador, iniciar com o Windows | |
+| F4 | Shim stdio + setup de Claude Code, Codex e OpenCode | ✅ agente real no Claude Code; falta clicar Add no Codex/OpenCode |
+| F5 | Polimento, instalador, iniciar com o Windows | 🚧 |
 
 ## Licença
 

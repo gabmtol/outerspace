@@ -14,3 +14,4 @@ path = "src/main.rs"
 outerspace-core.workspace = true
 serde_json.workspace = true
 ureq = { version = "3.5.0", default-features = false }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }

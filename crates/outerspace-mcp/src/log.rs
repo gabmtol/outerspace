@@ -1,4 +1,4 @@
-//! `%LOCALAPPDATA%\OuterSpace\logs\actions.jsonl`: one line per tool call, the only trail of what
+//! `logs\actions.jsonl` in the data folder: one line per tool call, the only trail of what
 //! agents did (docs/PLANO.md §2.6).
 
 use std::fs::{File, OpenOptions};

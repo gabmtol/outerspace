@@ -38,6 +38,8 @@ fn main() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+            let settings = config::load_or_create();
+            Fence::set_enabled(settings.fence);
             let fence = Fence::start();
             let power = Arc::new(PowerController::new(Box::new(ParsecVdd::new()), move |state| {
                 Fence::set_area(match state {
@@ -49,7 +51,7 @@ fn main() {
             let mcp_stop = CancellationToken::new();
             tauri::async_runtime::spawn({
                 let (power, stop) = (power.clone(), mcp_stop.clone());
-                let token = config::load_or_create().token;
+                let token = settings.token;
                 async move {
                     if let Err(err) = outerspace_mcp::run(power, MCP_PORT, token, stop).await {
                         tracing::error!(%err, port = MCP_PORT, "MCP server could not run");
@@ -89,8 +91,15 @@ fn main() {
     });
 }
 
+/// `logs/outerspace.YYYY-MM-DD.log`, one file a day, the last week kept.
 fn init_logging() -> tracing_appender::non_blocking::WorkerGuard {
-    let file = tracing_appender::rolling::never(paths::logs_dir(), "outerspace.log");
+    let file = tracing_appender::rolling::Builder::new()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("outerspace")
+        .filename_suffix("log")
+        .max_log_files(7)
+        .build(paths::logs_dir())
+        .expect("the logs folder is writable");
     let (writer, guard) = tracing_appender::non_blocking(file);
     tracing_subscriber::fmt()
         .with_writer(writer)

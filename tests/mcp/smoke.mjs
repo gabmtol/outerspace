@@ -7,7 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 const url = "http://127.0.0.1:7342/mcp";
-const { token } = JSON.parse(readFileSync(join(process.env.LOCALAPPDATA, "OuterSpace", "config.json"), "utf8"));
+const { token } = JSON.parse(readFileSync(join(process.env.LOCALAPPDATA, "com.gabmtol.outerspace", "config.json"), "utf8"));
 const out = join(import.meta.dirname, "..", "..", "target");
 mkdirSync(out, { recursive: true });
 

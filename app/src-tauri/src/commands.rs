@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use outerspace_core::setup::{self, Client, ClientInfo};
-use outerspace_core::{MCP_PORT, PowerController, PowerState, paths, system};
+use outerspace_core::{MCP_PORT, PowerController, PowerState, apps, paths, system};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
@@ -28,17 +28,28 @@ pub struct Status {
     version: String,
     autostart: bool,
     transparency: bool,
+    /// Windows mostly on the virtual display, while it is on.
+    windows_on_display: Option<usize>,
 }
 
 pub fn snapshot(app: &AppHandle) -> Status {
     let state = app.state::<AppState>();
+    let power = state.power.state();
+    let windows_on_display = match &power {
+        PowerState::On { display } => {
+            let rect = display.rect();
+            Some(apps::list().iter().filter(|w| w.rect.fraction_inside(&rect) > 0.5).count())
+        }
+        _ => None,
+    };
     Status {
-        power: state.power.state(),
+        power,
         installing: state.installing.load(Ordering::Relaxed),
         port: MCP_PORT,
         version: app.package_info().version.to_string(),
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
         transparency: system::transparency_enabled(),
+        windows_on_display,
     }
 }
 

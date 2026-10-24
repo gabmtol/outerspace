@@ -367,6 +367,12 @@ impl OuterSpace {
         let shot = blocking(move || capture::grab(area).and_then(|image| capture::encode(&image, scale, format)))
             .await?
             .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
+        self.log.record(
+            "screenshot",
+            json!({ "hwnd": params.hwnd, "scale": scale }),
+            true,
+            &format!("{}x{}", shot.width, shot.height),
+        );
         let data = base64::engine::general_purpose::STANDARD.encode(&shot.bytes);
         let info = json!({
             "width": shot.width,

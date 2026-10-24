@@ -14,6 +14,8 @@
     "on": "Active · {width}×{height} · {hz} Hz",
     "offDetail": "Agents can't use OuterSpace while it's off.",
     "onDetail": "Agents can open apps here without touching your screen.",
+    "oneWindow": "1 window on the virtual display.",
+    "windows": "{count} windows on the virtual display.",
     "toggle": "Virtual display"
   },
   "errors": {

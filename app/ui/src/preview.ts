@@ -29,7 +29,15 @@ const snippets: ClientSnippet[] = [
   { id: "opencode", name: "OpenCode", monogram: "OC", state: "notConfigured", command: "", configPath: "~/.config/opencode/opencode.json", config: "{}" },
 ];
 
-const status: Status = { power: power(), installing: false, port: 7342, version: "0.1.0", autostart: false, transparency: true };
+const status: Status = {
+  power: power(),
+  installing: false,
+  port: 7342,
+  version: "0.1.0",
+  autostart: false,
+  transparency: true,
+  windowsOnDisplay: params.get("state") === "on" ? 2 : null,
+};
 
 export async function invoke<T>(cmd: string): Promise<T> {
   const replies: Record<string, unknown> = { status, client_snippets: snippets };

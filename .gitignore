@@ -2,6 +2,7 @@
 /target/
 **/target/
 app/src-tauri/gen/
+app/src-tauri/binaries/
 
 # Node
 node_modules/

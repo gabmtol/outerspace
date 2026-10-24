@@ -1,5 +1,5 @@
-use outerspace_core::PowerState;
 use outerspace_core::input::fence::Fence;
+use outerspace_core::{PowerState, config};
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -101,8 +101,12 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
         }
         "open" => show_window(app),
         "fence" => {
-            Fence::set_enabled(!Fence::enabled());
-            tracing::info!(enabled = Fence::enabled(), "mouse fence toggled");
+            let enabled = !Fence::enabled();
+            Fence::set_enabled(enabled);
+            let mut settings = config::load_or_create();
+            settings.fence = enabled;
+            config::save(&settings);
+            tracing::info!(enabled, "mouse fence toggled");
             refresh(app);
         }
         "autostart" => {

@@ -1,4 +1,4 @@
-//! `%LOCALAPPDATA%\OuterSpace\config.json`: settings that must survive restarts.
+//! `config.json` in the data folder: settings that must survive restarts.
 
 use serde::{Deserialize, Serialize};
 use windows::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom};
@@ -10,6 +10,13 @@ pub struct Config {
     /// Bearer token for the local MCP endpoint. The stdio shim reads it from here, so agents'
     /// config files never contain it.
     pub token: String,
+    /// Keep the user's mouse out of the virtual display (tray menu).
+    #[serde(default = "on")]
+    pub fence: bool,
+}
+
+fn on() -> bool {
+    true
 }
 
 /// Reads the config without creating anything (the stdio shim uses this; the app owns the file).
@@ -20,20 +27,23 @@ pub fn load() -> Option<Config> {
 
 /// Reads the config, creating it (with a fresh random token) on first run.
 pub fn load_or_create() -> Config {
+    load().unwrap_or_else(|| {
+        let config = Config { token: random_token(), fence: true };
+        save(&config);
+        config
+    })
+}
+
+pub fn save(config: &Config) {
     let path = paths::data_dir().join("config.json");
-    if let Some(config) = load() {
-        return config;
-    }
-    let config = Config { token: random_token() };
-    match serde_json::to_vec_pretty(&config) {
+    match serde_json::to_vec_pretty(config) {
         Ok(bytes) => {
             if let Err(err) = std::fs::write(&path, bytes) {
-                tracing::warn!(?path, %err, "could not save config; the token will change on restart");
+                tracing::warn!(?path, %err, "could not save config");
             }
         }
         Err(err) => tracing::warn!(%err, "could not serialize config"),
     }
-    config
 }
 
 fn random_token() -> String {

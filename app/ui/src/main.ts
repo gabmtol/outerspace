@@ -57,10 +57,12 @@ function render(status: Status): void {
     case "stopping":
       statusText.textContent = t("power.stopping");
       break;
-    case "on":
+    case "on": {
       statusText.textContent = t("power.on", { ...power.display });
-      detail = t("power.onDetail");
+      const count = status.windowsOnDisplay ?? 0;
+      detail = count === 0 ? t("power.onDetail") : count === 1 ? t("power.oneWindow") : t("power.windows", { count });
       break;
+    }
     case "error": {
       const [title, more] = ERROR_TEXT[power.code];
       statusText.textContent = t(title);
@@ -200,3 +202,8 @@ applyI18n();
 const [status, snippets] = await Promise.all([invoke<Status>("status"), invoke<ClientSnippet[]>("client_snippets")]);
 render(status);
 renderClients(snippets);
+
+// Windows come and go on the virtual display without a power change; refresh while visible.
+window.setInterval(async () => {
+  if (!document.hidden) render(await invoke<Status>("status"));
+}, 3000);

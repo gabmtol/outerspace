@@ -2619,6 +2619,7 @@ dependencies = [
  "outerspace-core",
  "serde_json",
  "ureq",
+ "windows",
 ]
 
 [[package]]

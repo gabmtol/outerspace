@@ -5,8 +5,7 @@
 //! stdin/stdout carry newline-delimited JSON-RPC messages; diagnostics go to stderr only.
 
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::windows::process::CommandExt;
-use std::process::{Command, Stdio};
+use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -14,11 +13,14 @@ use outerspace_core::{MCP_PORT, config};
 use serde_json::{Value, json};
 use ureq::Agent;
 use ureq::http::Response;
+use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::System::Threading::{
+    CREATE_BREAKAWAY_FROM_JOB, CreateProcessW, DETACHED_PROCESS, PROCESS_INFORMATION, STARTUPINFOW,
+};
+use windows::core::{PCWSTR, PWSTR};
 
 /// Cold start of the app (driver checks, WebView) can take a while.
 const START_TIMEOUT: Duration = Duration::from_secs(20);
-const DETACHED_PROCESS: u32 = 0x0000_0008;
-const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 
 fn main() {
     let bridge = Arc::new(Bridge::new());
@@ -90,19 +92,7 @@ impl Bridge {
                 .filter(|app| app.is_file())
                 .ok_or("OuterSpace is not running and OuterSpace.exe was not found next to outerspace-mcp.exe")?;
             eprintln!("outerspace-mcp: starting {}", app.display());
-            // Leave the client's job object if allowed, so closing the client does not close OuterSpace.
-            let spawn = |flags: u32| {
-                Command::new(&app)
-                    .arg("--hidden")
-                    .creation_flags(flags)
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-            };
-            spawn(DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB)
-                .or_else(|_| spawn(DETACHED_PROCESS))
-                .map_err(|e| format!("could not start OuterSpace: {e}"))?;
+            start_detached(&app)?;
             let deadline = Instant::now() + START_TIMEOUT;
             while !self.healthy() {
                 if Instant::now() >= deadline {
@@ -227,6 +217,44 @@ impl Bridge {
                 .call();
         }
     }
+}
+
+/// Starts OuterSpace in the tray, fully on its own. `std::process::Command` would let it inherit
+/// every inheritable handle of this process — including the client's pipes, which the client then
+/// never sees closed — so it goes through CreateProcess with inheritance off. It also tries to leave
+/// the client's job object, so closing the client does not take OuterSpace down with it.
+fn start_detached(app: &Path) -> Result<(), String> {
+    let mut command_line: Vec<u16> = format!("\"{}\" --hidden", app.display()).encode_utf16().chain([0]).collect();
+    let startup = STARTUPINFOW { cb: size_of::<STARTUPINFOW>() as u32, ..Default::default() };
+    let mut last_error = None;
+    for flags in [DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB, DETACHED_PROCESS] {
+        let mut process = PROCESS_INFORMATION::default();
+        let started = unsafe {
+            CreateProcessW(
+                PCWSTR::null(),
+                Some(PWSTR(command_line.as_mut_ptr())),
+                None,
+                None,
+                false,
+                flags,
+                None,
+                PCWSTR::null(),
+                &startup,
+                &mut process,
+            )
+        };
+        match started {
+            Ok(()) => {
+                unsafe {
+                    let _ = CloseHandle(process.hThread);
+                    let _ = CloseHandle(process.hProcess);
+                }
+                return Ok(());
+            }
+            Err(err) => last_error = Some(err),
+        }
+    }
+    Err(format!("could not start OuterSpace: {}", last_error.map(|e| e.message()).unwrap_or_default()))
 }
 
 fn header(response: &Response<ureq::Body>, name: &str) -> Option<String> {
