@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OuterSpace minimal icon candidates</title>
+<style>
+  body { margin: 0; font: 14px/1.35 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; background: #eeeaf1; color: #1c1c1e; }
+  .sheet { display: grid; grid-template-columns: repeat(5, 1fr); width: 1600px; }
+  .cell { padding: 26px 18px 22px; text-align: center; }
+  .cell:nth-child(odd) { background: #e6e1ea; }
+  h2 { margin: 0 0 2px; font-size: 18px; font-weight: 600; }
+  p { margin: 0 0 12px; color: #5b5866; min-height: 38px; }
+  .big { width: 220px; height: 220px; display: block; margin: 0 auto 14px; }
+  .row { display: flex; justify-content: center; align-items: end; gap: 16px; padding: 12px; border-radius: 14px; }
+  .light { background: #f8f6fa; }
+  .dark { background: #1b1a22; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="sheet" id="sheet"></div>
+<script>
+  const icons = [
+    ["twin", "Twin", "A screen and its virtual twin behind frosted glass"],
+    ["dashed", "Dashed", "Real stand, virtual (dashed) display"],
+    ["peek", "Peek", "The virtual screen peeks in from outside"],
+    ["presence", "Presence", "Empty glass screen, the agent as a warm light"],
+    ["stack", "Stack", "Displays layered in depth"],
+    ["split", "Split", "Half solid, half outline: physical | virtual"],
+    ["frosted", "Frosted", "A screen behind a frosted pane"],
+    ["brackets", "Brackets", "A display that is only a frame"],
+    ["reflection", "Reflection", "A screen and its reflection"],
+    ["send", "Send", "Send a window to the other display"],
+  ];
+  const src = (n) => `../assets/icon/minimal/outerspace-${n}.svg`;
+  const sizes = (n) => [64, 32, 16].map((s) => `<img src="${src(n)}" width="${s}">`).join("");
+  document.getElementById("sheet").innerHTML = icons.map(([n, title, desc], i) => `
+    <div class="cell">
+      <h2>${i + 1} · ${title}</h2>
+      <p>${desc}</p>
+      <img class="big" src="${src(n)}">
+      <div class="row light">${sizes(n)}</div>
+      <div class="row dark">${sizes(n)}</div>
+    </div>`).join("");
+</script>
+</body>
+</html>
