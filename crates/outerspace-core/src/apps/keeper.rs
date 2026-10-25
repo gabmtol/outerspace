@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -17,17 +17,26 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SW_SHOWNOACTIVATE, ShowWindow,
 };
 
-use super::{Hwnd, frame_rect, give_foreground_to, handle, set_frame, work_area};
+use super::{Hwnd, frame_rect, give_foreground_to, handle, is_app_window, set_frame, work_area};
 use crate::geom::Rect;
 use crate::system::dpi_aware;
 
 const TICK: Duration = Duration::from_millis(100);
 /// Same rule as everywhere else: a window is "on the display" when most of it is there.
 const ON_DISPLAY: f64 = 0.5;
+/// How long after it appears a window is left out of the minimize trick: apps still setting up
+/// their rendering (Blender's Vulkan backend) can crash when minimized then.
+const STARTUP: Duration = Duration::from_secs(5);
+
+#[derive(Clone, Copy)]
+struct Tracked {
+    since: Instant,
+    /// The last frame it had on the virtual display.
+    last_good: Option<Rect>,
+}
 
 pub struct Keeper {
-    /// Each tracked window with the last frame it had on the virtual display.
-    windows: Arc<Mutex<HashMap<Hwnd, Option<Rect>>>>,
+    windows: Arc<Mutex<HashMap<Hwnd, Tracked>>>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -35,7 +44,7 @@ pub struct Keeper {
 impl Keeper {
     /// `display` reports where the virtual display is, or `None` while it is off.
     pub fn start(display: impl Fn() -> Option<Rect> + Send + 'static) -> Self {
-        let windows: Arc<Mutex<HashMap<Hwnd, Option<Rect>>>> = Arc::default();
+        let windows: Arc<Mutex<HashMap<Hwnd, Tracked>>> = Arc::default();
         let stop = Arc::new(AtomicBool::new(false));
         let thread = std::thread::Builder::new()
             .name("window-keeper".into())
@@ -64,7 +73,9 @@ impl Keeper {
 
     /// Starts (or refreshes) watching a window the agent placed on the virtual display.
     pub fn track(&self, hwnd: Hwnd, frame: Rect) {
-        lock(&self.windows).insert(hwnd, Some(frame));
+        let mut windows = lock(&self.windows);
+        let since = windows.get(&hwnd).map_or_else(Instant::now, |tracked| tracked.since);
+        windows.insert(hwnd, Tracked { since, last_good: Some(frame) });
     }
 
     pub fn forget(&self, hwnd: Hwnd) {
@@ -81,9 +92,9 @@ impl Drop for Keeper {
     }
 }
 
-fn keep(windows: &mut HashMap<Hwnd, Option<Rect>>, display: Rect) {
+fn keep(windows: &mut HashMap<Hwnd, Tracked>, display: Rect) {
     windows.retain(|&hwnd, _| handle(hwnd).is_ok_and(|h| unsafe { IsWindow(Some(h)) }.as_bool()));
-    for (&hwnd, last_good) in windows.iter_mut() {
+    for (&hwnd, Tracked { last_good, .. }) in windows.iter_mut() {
         let Ok(window) = handle(hwnd) else { continue };
         if unsafe { IsIconic(window) }.as_bool() {
             continue;
@@ -103,30 +114,49 @@ fn keep(windows: &mut HashMap<Hwnd, Option<Rect>>, display: Rect) {
 }
 
 /// The agent's windows live on a display the user does not work on, so they have no business in
-/// the foreground: when one (or a dialog it owns) gets there — apps may take it once the user has
-/// been idle for a while — the foreground goes straight back to the user's last window.
+/// the foreground: when one (or a dialog it owns) takes it — apps may, once the user has been idle
+/// for a while — the foreground goes back to the user's last window. One try per steal: retrying
+/// every tick once had Blender minimized and restored ten times a second until it crashed.
 #[derive(Default)]
 struct FocusGuard {
-    /// The user's most recent foreground window: never an agent window, never on the virtual display.
+    /// The user's most recent foreground app window: never an agent window, never on the virtual
+    /// display, never the taskbar or other shell UI (they can't be handed the foreground).
     user_window: Option<Hwnd>,
-    /// The agent window last handed back, so one steal logs once instead of every tick.
-    last_steal: Option<Hwnd>,
+    /// The foreground window at the last tick, whatever it was.
+    previous: Option<Hwnd>,
+    /// The agent window in the foreground that was already dealt with (handed back, or left there):
+    /// nothing more happens until the foreground moves.
+    handled: Option<Hwnd>,
 }
 
 impl FocusGuard {
-    fn check(&mut self, windows: &HashMap<Hwnd, Option<Rect>>, display: Rect) {
+    fn check(&mut self, windows: &HashMap<Hwnd, Tracked>, display: Rect) {
         let foreground = unsafe { GetForegroundWindow() };
         // Borrow-mode input holds the foreground on purpose for a moment and hands it back itself.
         if foreground.is_invalid() || crate::input::borrowing() {
             return;
         }
+        let previous = self.previous.replace(id(foreground));
         let root = unsafe { GetAncestor(foreground, GA_ROOTOWNER) };
         let is_agent = |hwnd: Hwnd| windows.contains_key(&hwnd);
         if !is_agent(id(foreground)) && !is_agent(id(root)) {
-            if frame_rect(foreground).fraction_inside(&display) <= ON_DISPLAY {
+            if is_app_window(foreground, true) && frame_rect(foreground).fraction_inside(&display) <= ON_DISPLAY {
                 self.user_window = Some(id(foreground));
             }
-            self.last_steal = None;
+            self.handled = None;
+            return;
+        }
+        if self.handled == Some(id(foreground)) {
+            return;
+        }
+        self.handled = Some(id(foreground));
+        // Arriving from the taskbar, Alt+Tab or Start: the user picked this window themselves.
+        if previous
+            .filter(|&p| p != id(foreground))
+            .and_then(|p| handle(p).ok())
+            .is_some_and(|p| !is_app_window(p, true))
+        {
+            tracing::info!(agent = id(foreground), "the user switched to an agent window; leaving it in front");
             return;
         }
         let target = self
@@ -135,32 +165,25 @@ impl FocusGuard {
             .and_then(|hwnd| handle(hwnd).ok())
             .or_else(|| top_user_window(windows, display));
         let Some(target) = target else { return };
+        let window = if is_agent(id(root)) { root } else { foreground };
+        let started = windows.get(&id(window)).is_some_and(|tracked| tracked.since.elapsed() >= STARTUP);
         let mut restored = give_foreground_to(target);
-        if !restored {
-            // Windows refused SetForegroundWindow. Minimizing the active window always makes it pass
-            // the foreground on (to the next window: the user's); restore it right away, inactive.
-            // It all happens on the virtual display, out of the user's sight.
-            let window = if is_agent(id(root)) { root } else { foreground };
+        if !restored && started {
+            // Windows refused SetForegroundWindow. Minimizing the active window makes it pass the
+            // foreground on (to the next window: the user's); restore it right away, inactive. It
+            // all happens on the virtual display, out of the user's sight.
             unsafe {
                 let _ = ShowWindow(window, SW_MINIMIZE);
                 let _ = ShowWindow(window, SW_SHOWNOACTIVATE);
             }
             restored = unsafe { GetForegroundWindow() } != foreground;
         }
-        if self.last_steal != Some(id(foreground)) {
-            self.last_steal = Some(id(foreground));
-            tracing::info!(
-                agent = id(foreground),
-                user = id(target),
-                restored,
-                "agent window took the foreground; gave it back"
-            );
-        }
+        tracing::info!(agent = id(foreground), user = id(target), restored, "agent window took the foreground");
     }
 }
 
 /// Front-most window on the user's own monitors, for when we never saw their foreground window.
-fn top_user_window(windows: &HashMap<Hwnd, Option<Rect>>, display: Rect) -> Option<HWND> {
+fn top_user_window(windows: &HashMap<Hwnd, Tracked>, display: Rect) -> Option<HWND> {
     super::list()
         .into_iter()
         .find(|w| !windows.contains_key(&w.hwnd) && !w.minimized && w.rect.fraction_inside(&display) <= ON_DISPLAY)
