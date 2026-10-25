@@ -2566,7 +2566,7 @@ dependencies = [
 
 [[package]]
 name = "outerspace"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "base64 0.23.1",
  "outerspace-core",
@@ -2584,7 +2584,7 @@ dependencies = [
 
 [[package]]
 name = "outerspace-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "image",
  "jsonc-parser",
@@ -2600,7 +2600,7 @@ dependencies = [
 
 [[package]]
 name = "outerspace-mcp"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -2615,7 +2615,7 @@ dependencies = [
 
 [[package]]
 name = "outerspace-shim"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "outerspace-core",
  "serde_json",
