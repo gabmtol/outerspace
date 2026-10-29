@@ -127,6 +127,7 @@ O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. 
 | F5 | Polimento, instalador, iniciar com o Windows | ✅ instalador sem admin; 0,04% CPU e 40 MB com o monitor ligado |
 | v1 | Peek: o monitor virtual ao vivo numa janela | ✅ |
 | v1 | Escolher a resolução (1280×720 a 3840×2160) | ✅ |
+| v1 | Escolher a escala (100% até o máximo que o Windows permite na resolução) | ✅ |
 | v1 | Devolver janelas: pelos ícones na janela do app ou com `return_window` | ✅ |
 | v1 | `ui_tree` e `wait_for` para os agentes | |
 | v1 | Atualização automática | |
