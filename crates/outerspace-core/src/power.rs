@@ -5,6 +5,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use serde::Serialize;
 
+use crate::display::scale::{self, Scales};
 use crate::display::{DisplayError, DisplayInfo, DisplayMode, DriverStatus, VirtualDisplayBackend};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -45,6 +46,8 @@ pub struct PowerController {
     mode: Mutex<DisplayMode>,
     /// The backend's offered modes, read once: asking the backend would wait out a connect.
     modes: Vec<DisplayMode>,
+    /// The scale chosen by the user, in percent; `None` leaves Windows' own.
+    scale: Mutex<Option<u32>>,
     listener: Listener,
 }
 
@@ -60,6 +63,7 @@ impl PowerController {
             backend: Mutex::new(backend),
             state: Mutex::new(state),
             mode: Mutex::new(DisplayMode::DEFAULT),
+            scale: Mutex::new(None),
             listener: Box::new(listener),
         }
     }
@@ -95,6 +99,7 @@ impl PowerController {
             return match backend.set_mode(mode) {
                 Ok(display) => {
                     *lock(&self.mode) = mode;
+                    self.apply_scale(&display);
                     Ok(self.set(PowerState::On { display }))
                 }
                 Err(err) => {
@@ -109,6 +114,38 @@ impl PowerController {
         }
         *lock(&self.mode) = mode;
         Ok(self.state())
+    }
+
+    /// The display's scale and the ones Windows allows at its resolution, while it is on.
+    pub fn scales(&self) -> Option<Scales> {
+        match self.state() {
+            PowerState::On { display } => scale::get(&display.device_name),
+            _ => None,
+        }
+    }
+
+    /// Chooses the scale, kept across resolution changes. A display that is on takes it right away;
+    /// if Windows refuses it, the choice stays as it was.
+    pub fn set_scale(&self, percent: u32) -> Result<(), DisplayError> {
+        let _backend = lock(&self.backend);
+        if let PowerState::On { display } = self.state() {
+            scale::set(&display.device_name, percent)?;
+        }
+        *lock(&self.scale) = Some(percent);
+        Ok(())
+    }
+
+    /// Windows keeps a scale per monitor and resolution: after plugging in or switching modes, put
+    /// the user's back (or the largest one this resolution allows, if theirs is too big for it).
+    fn apply_scale(&self, display: &DisplayInfo) {
+        let Some(wanted) = *lock(&self.scale) else { return };
+        let Some(scales) = scale::get(&display.device_name) else { return };
+        let percent = scales.closest(wanted);
+        if percent != scales.current
+            && let Err(err) = scale::set(&display.device_name, percent)
+        {
+            tracing::warn!(%err, percent, "could not set the virtual display's scale");
+        }
     }
 
     /// Blocks while the display is plugged in and arranged (a few seconds at most).
@@ -164,7 +201,10 @@ impl PowerController {
     fn connect(&self, backend: &mut MutexGuard<'_, Box<dyn VirtualDisplayBackend>>) -> PowerState {
         self.set(PowerState::Starting);
         match backend.connect(self.mode()) {
-            Ok(display) => self.set(PowerState::On { display }),
+            Ok(display) => {
+                self.apply_scale(&display);
+                self.set(PowerState::On { display })
+            }
             Err(DisplayError::Driver(status)) => self.set(
                 driver_problem(status).unwrap_or(PowerState::Error { code: ErrorCode::ConnectFailed, message: None }),
             ),

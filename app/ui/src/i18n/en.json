@@ -22,7 +22,10 @@
     "resolution": "Resolution",
     "resolutionTitle": "Size of the virtual display. Bigger fits more on screen, but agents' screenshots get heavier.",
     "mode": "{width} × {height}",
-    "changed": "Virtual display set to {width} × {height}"
+    "changed": "Virtual display set to {width} × {height}",
+    "scaleOption": "{percent}%",
+    "scaleTitle": "Scale: how big text and apps look on the virtual display. Windows recommends {recommended}%.",
+    "scaleChanged": "Virtual display scale set to {percent}%"
   },
   "dock": {
     "bringBack": "{name}\nClick to move it to your screen",

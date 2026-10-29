@@ -17,6 +17,9 @@ pub struct Config {
     /// The virtual display's resolution.
     #[serde(default)]
     pub mode: DisplayMode,
+    /// The virtual display's scale in percent; absent, Windows picks it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<u32>,
 }
 
 fn on() -> bool {
@@ -32,7 +35,7 @@ pub fn load() -> Option<Config> {
 /// Reads the config, creating it (with a fresh random token) on first run.
 pub fn load_or_create() -> Config {
     load().unwrap_or_else(|| {
-        let config = Config { token: random_token(), fence: true, mode: DisplayMode::DEFAULT };
+        let config = Config { token: random_token(), fence: true, mode: DisplayMode::DEFAULT, scale: None };
         save(&config);
         config
     })

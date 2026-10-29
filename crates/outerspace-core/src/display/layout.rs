@@ -185,7 +185,7 @@ fn apply(name: &str, mode: DisplayMode, x: i32, y: i32, fields: DEVMODE_FIELD_FL
     Ok(())
 }
 
-fn from_wide(chars: &[u16]) -> String {
+pub(super) fn from_wide(chars: &[u16]) -> String {
     let len = chars.iter().position(|&c| c == 0).unwrap_or(chars.len());
     String::from_utf16_lossy(&chars[..len])
 }

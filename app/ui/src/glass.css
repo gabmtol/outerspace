@@ -79,6 +79,7 @@ main { flex: 1; padding: 4px 16px 0; display: flex; flex-direction: column; min-
   margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--hairline);
 }
 .setting[hidden] { display: none; }
+.popups { display: flex; gap: 6px; }
 
 /* NSPopUpButton: a quiet capsule with up/down chevrons; the list itself is the system's. */
 .popup {
@@ -88,6 +89,7 @@ main { flex: 1; padding: 4px 16px 0; display: flex; flex-direction: column; min-
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 11' fill='none' stroke='%238e8e93' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 4l2.5-2.5L6 4M1 7l2.5 2.5L6 7'/%3E%3C/svg%3E");
   transition: background-color var(--motion);
 }
+.popup[hidden] { display: none; }
 .popup:hover:not(:disabled) { background-color: var(--control-fill-hover); }
 /* The open list inherits the text color but not the theme: give it both, opaque. */
 .popup option { background: var(--menu-fill); color: var(--menu-text); }

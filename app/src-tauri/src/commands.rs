@@ -4,6 +4,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use base64::Engine;
 use outerspace_core::apps::{Keeper, WindowInfo};
+use outerspace_core::display::scale::Scales;
 use outerspace_core::setup::{self, Client, ClientInfo};
 use outerspace_core::{DisplayMode, MCP_PORT, PowerController, PowerState, apps, config, paths, system};
 use serde::Serialize;
@@ -37,6 +38,8 @@ pub struct Status {
     /// The chosen resolution, and the ones to choose from.
     mode: DisplayMode,
     modes: Vec<DisplayMode>,
+    /// The display's scale and the ones it allows, while it is on.
+    scales: Option<Scales>,
 }
 
 /// A window on the virtual display, as the UI lists it.
@@ -92,6 +95,7 @@ pub fn snapshot(app: &AppHandle) -> Status {
         windows,
         mode: state.power.mode(),
         modes: state.power.modes().to_vec(),
+        scales: state.power.scales(),
     }
 }
 
@@ -181,6 +185,22 @@ pub async fn set_resolution(app: AppHandle, width: u32, height: u32) -> Result<S
     settings.mode = mode;
     config::save(&settings);
     tracing::info!(width, height, "resolution chosen");
+    publish(&app);
+    Ok(snapshot(&app))
+}
+
+/// Chooses the virtual display's scale, remembered across restarts and resolution changes.
+#[tauri::command]
+pub async fn set_scale(app: AppHandle, percent: u32) -> Result<Status, String> {
+    let power = app.state::<AppState>().power.clone();
+    tauri::async_runtime::spawn_blocking(move || power.set_scale(percent))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    let mut settings = config::load_or_create();
+    settings.scale = Some(percent);
+    config::save(&settings);
+    tracing::info!(percent, "scale chosen");
     publish(&app);
     Ok(snapshot(&app))
 }

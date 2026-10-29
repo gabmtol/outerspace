@@ -21,6 +21,7 @@ const peekButton = $<HTMLButtonElement>("#btn-peek");
 const dock = $("#dock");
 const resolutionRow = $("#resolution-row");
 const resolution = $<HTMLSelectElement>("#resolution");
+const scale = $<HTMLSelectElement>("#scale");
 const powerActions = $("#power-actions");
 const installButton = $<HTMLButtonElement>("#btn-install");
 const restartDriverButton = $<HTMLButtonElement>("#btn-restart-driver");
@@ -33,6 +34,7 @@ const toast = $("#toast");
 let current: Status | undefined;
 /** Set while a resolution change is on its way, so status refreshes don't snap the menu back. */
 let changingResolution = false;
+let changingScale = false;
 /** What the dock shows, so refreshes only rebuild it when a window came, went or changed. */
 let dockKey = "";
 
@@ -102,6 +104,23 @@ function render(status: Status): void {
   }
   if (!changingResolution) resolution.value = modeKey(status.mode);
   resolution.disabled = busy || changingResolution;
+
+  // Windows only says which scales a display allows while it is on.
+  const scales = power.kind === "on" ? status.scales : null;
+  scale.hidden = !scales;
+  if (scales) {
+    const choices = scales.available.join();
+    if (scale.dataset.choices !== choices) {
+      scale.dataset.choices = choices;
+      scale.replaceChildren(
+        ...scales.available.map((percent) => new Option(t("display.scaleOption", { percent }), String(percent))),
+      );
+    }
+    if (!changingScale) scale.value = String(scales.current);
+    scale.title = t("display.scaleTitle", { recommended: scales.recommended });
+    scale.setAttribute("aria-label", scale.title);
+  }
+  scale.disabled = busy || changingScale;
 
   installButton.disabled = status.installing;
   installButton.textContent = t(status.installing ? "actions.installing" : "actions.installDriver");
@@ -245,6 +264,16 @@ resolution.addEventListener("change", async () => {
   changingResolution = false;
   if (status?.power.kind === "on") showToast(t("display.changed", { width, height }));
   // On failure the toast already says why; the menu goes back to what is really set.
+  render(status ?? (await invoke<Status>("status")));
+});
+
+scale.addEventListener("change", async () => {
+  const percent = Number(scale.value);
+  changingScale = true;
+  scale.disabled = true;
+  const status = await run<Status>("set_scale", { percent });
+  changingScale = false;
+  if (status) showToast(t("display.scaleChanged", { percent }));
   render(status ?? (await invoke<Status>("status")));
 });
 

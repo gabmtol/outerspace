@@ -29,6 +29,13 @@ export type PowerState =
   | { kind: "on"; display: DisplayInfo }
   | { kind: "error"; code: ErrorCode; message?: string };
 
+/** A display's scale and the ones Windows allows at its resolution, in percent. */
+export interface Scales {
+  current: number;
+  recommended: number;
+  available: number[];
+}
+
 /** A window on the virtual display. */
 export interface DisplayWindow {
   hwnd: number;
@@ -50,6 +57,8 @@ export interface Status {
   /** The chosen resolution, and the ones to choose from. */
   mode: DisplayMode;
   modes: DisplayMode[];
+  /** The virtual display's scale, while it is on. */
+  scales: Scales | null;
 }
 
 export interface ClientSnippet {

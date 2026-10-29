@@ -36,6 +36,7 @@ fn main() {
             commands::status,
             commands::set_power,
             commands::set_resolution,
+            commands::set_scale,
             commands::install_driver,
             commands::restart_driver,
             commands::set_autostart,
@@ -60,6 +61,9 @@ fn main() {
             }));
             if let Err(err) = power.set_mode(settings.mode) {
                 tracing::warn!(%err, "saved resolution ignored");
+            }
+            if let Some(scale) = settings.scale {
+                let _ = power.set_scale(scale);
             }
             // Holds the agents' windows on the virtual display, until the user takes one back.
             let keeper = Arc::new(Keeper::start({

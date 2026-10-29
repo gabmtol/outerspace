@@ -268,13 +268,14 @@ impl OuterSpace {
         let (display, work_area, windows) = match &state {
             PowerState::On { display } => {
                 let rect = display.rect();
-                let (work, count) = blocking(move || {
+                let power = self.power.clone();
+                let (work, count, scale) = blocking(move || {
                     let count = apps::list().iter().filter(|w| w.rect.fraction_inside(&rect) > ON_DISPLAY).count();
-                    (apps::work_area(rect), count)
+                    (apps::work_area(rect), count, power.scales().map(|s| s.current))
                 })
                 .await?;
                 (
-                    Some(json!({ "width": display.width, "height": display.height, "hz": display.hz })),
+                    Some(json!({ "width": display.width, "height": display.height, "hz": display.hz, "scale": scale })),
                     Some(to_display(work, rect)),
                     Some(count),
                 )

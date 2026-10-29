@@ -4,6 +4,7 @@
 
 pub mod layout;
 pub mod parsec;
+pub mod scale;
 
 use serde::{Deserialize, Serialize};
 
