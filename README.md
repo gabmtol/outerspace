@@ -24,7 +24,7 @@ O OuterSpace cria um **monitor virtual de verdade** no Windows (um display que a
 
 - **Fica na bandeja.** Você inicia uma vez e ele fica em segundo plano (e o agente o abre sozinho quando precisa).
 - **Um switch.** Ligado: o monitor virtual aparece e o servidor MCP aceita chamadas. Desligado: o monitor some e tudo é bloqueado.
-- **Setup em um clique** para **Claude Code**, **Codex CLI** e **OpenCode** (ou qualquer cliente MCP).
+- **Setup em um clique** para **Claude Code**, o **app do Claude**, **Codex CLI** e **OpenCode** (ou qualquer cliente MCP).
 - **Sem problemas de GPU.** Como é um display ativo, Chrome, VS Code e apps DirectX renderizam como em qualquer monitor — diferente de janelas minimizadas ou desktops ocultos.
 
 <p align="center">
@@ -36,7 +36,7 @@ O OuterSpace cria um **monitor virtual de verdade** no Windows (um display que a
 
 1. Baixe o [`OuterSpace-setup.exe`](https://github.com/gabmtol/outerspace/releases/latest/download/OuterSpace-setup.exe) da última release (ou gere com `scripts/build-installer.ps1`, veja abaixo) e rode. Instala só para o seu usuário, em `%LOCALAPPDATA%\OuterSpace`, sem pedir administrador. O instalador ainda não é assinado: se o Windows avisar, use *Mais informações → Executar assim mesmo*.
 2. Abra o OuterSpace e ligue o switch. Na primeira vez ele pede para instalar o driver de monitor virtual (**Parsec VDD**, assinado pela Parsec): baixa o instalador oficial, confere o SHA-256 e pede permissão de administrador uma única vez.
-3. Em **Connect an agent**, clique em **Add** no Claude Code, Codex ou OpenCode. Reinicie o cliente se ele estiver aberto.
+3. Em **Connect an agent**, clique em **Add** no Claude Code, Claude Desktop, Codex ou OpenCode. Reinicie o cliente se ele estiver aberto (o app do Claude precisa ser fechado pela bandeja e aberto de novo).
 
 Pronto: peça ao agente algo como *"use o OuterSpace para abrir o Edge em example.com e me diga o que aparece"*.
 
@@ -45,12 +45,13 @@ Os dados do app (token, configurações, logs) ficam em `%LOCALAPPDATA%\com.gabm
 ## Como funciona
 
 ```
-Claude Code ─┐
-Codex CLI  ──┼─ stdio ─▶ outerspace-mcp.exe ─ HTTP local + token ─▶ OuterSpace.exe (bandeja)
-OpenCode   ──┘          (abre o app se preciso)                     ├─ monitor virtual (driver IddCx)
-                                                                    ├─ abre/move janelas sem roubar foco
-                                                                    ├─ screenshot do monitor virtual
-                                                                    └─ clique/teclado sem mover seu cursor
+Claude Code ───┐
+Claude Desktop ┤
+Codex CLI  ────┼─ stdio ─▶ outerspace-mcp.exe ─ HTTP local + token ─▶ OuterSpace.exe (bandeja)
+OpenCode   ────┘          (abre o app se preciso)                     ├─ monitor virtual (driver IddCx)
+                                                                      ├─ abre/move janelas sem roubar foco
+                                                                      ├─ screenshot do monitor virtual
+                                                                      └─ clique/teclado sem mover seu cursor
 ```
 
 Ferramentas MCP: `status`, `launch`, `list_windows`, `screenshot`, `click`, `type_text`, `press_keys`, `scroll`, `move_window`, `close_window`, `return_window`.
@@ -63,6 +64,16 @@ claude mcp add --transport stdio --scope user outerspace -- "%LOCALAPPDATA%\Oute
 
 # Codex CLI (o app também ajusta startup_timeout_sec = 20 no config.toml)
 codex mcp add outerspace -- "%LOCALAPPDATA%\OuterSpace\outerspace-mcp.exe"
+```
+
+App do Claude (Claude Desktop): não tem linha de comando, então o app acrescenta o servidor ao `claude_desktop_config.json` sem mexer no resto. O lugar mudou entre versões: `%LOCALAPPDATA%\Claude-Data\claude_<id>\` na versão atual da Microsoft Store, `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\` nas mais antigas e `%APPDATA%\Claude\` no instalador comum; o OuterSpace procura nos três (o caminho usado aparece em **Show manual config**). À mão:
+
+```json
+{
+  "mcpServers": {
+    "outerspace": { "command": "C:\\Users\\<você>\\AppData\\Local\\OuterSpace\\outerspace-mcp.exe", "args": [] }
+  }
+}
 ```
 
 OpenCode: o app edita o seu `opencode.jsonc`/`opencode.json` preservando comentários. Qualquer outro cliente MCP pode usar o `outerspace-mcp.exe` por stdio, ou falar direto com `http://127.0.0.1:7342/mcp` com o cabeçalho `Authorization: Bearer <token>` (o token está em `config.json` na pasta de dados).
@@ -128,6 +139,7 @@ O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. 
 | v1 | Peek: o monitor virtual ao vivo numa janela | ✅ |
 | v1 | Escolher a resolução (1280×720 a 3840×2160) | ✅ |
 | v1 | Escolher a escala (100% até o máximo que o Windows permite na resolução) | ✅ |
+| v1 | Setup em um clique para o app do Claude (Claude Desktop) | ✅ |
 | v1 | Devolver janelas: pelos ícones na janela do app ou com `return_window` | ✅ |
 | v1 | `ui_tree` e `wait_for` para os agentes | |
 | v1 | Atualização automática | |

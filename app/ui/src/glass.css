@@ -155,6 +155,7 @@ main { flex: 1; padding: 4px 16px 0; display: flex; flex-direction: column; min-
   font: 700 9px/1 var(--font); color: #fff; letter-spacing: 0;
 }
 .client[data-client="claude"] .client-icon { background: #d97706; }
+.client[data-client="claude-desktop"] .client-icon { background: #b45309; }
 .client[data-client="codex"] .client-icon { background: #48484a; }
 .client[data-client="opencode"] .client-icon { background: #5856d6; }
 .client-name { flex: 1; font: 500 13px/18px var(--font); }

@@ -62,7 +62,7 @@ export interface Status {
 }
 
 export interface ClientSnippet {
-  id: "claude" | "codex" | "opencode";
+  id: "claude" | "claude-desktop" | "codex" | "opencode";
   name: string;
   monogram: string;
   /// "outdated": configured, but for another copy of outerspace-mcp.exe.

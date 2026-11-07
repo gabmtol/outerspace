@@ -6,7 +6,7 @@ const params = new URLSearchParams(location.search);
 
 // Stand-in for the blurred desktop that the OS acrylic shows behind the window, at the window's real size.
 document.documentElement.style.background = "linear-gradient(160deg, #7a8fb8 0%, #c98a7a 55%, #e7b07c 100%)";
-Object.assign(document.body.style, { width: "380px", height: "460px", position: "relative" });
+Object.assign(document.body.style, { width: "380px", height: "504px", position: "relative" });
 
 function power(): PowerState {
   switch (params.get("state")) {
@@ -25,6 +25,7 @@ const shim = "C:\\Users\\you\\AppData\\Local\\OuterSpace\\outerspace-mcp.exe";
 
 const snippets: ClientSnippet[] = [
   { id: "claude", name: "Claude Code", monogram: "CC", state: "configured", command: `claude mcp add --transport stdio --scope user outerspace -- "${shim}"`, configPath: "~/.claude.json", config: "{}" },
+  { id: "claude-desktop", name: "Claude Desktop", monogram: "CD", state: "notConfigured", command: "{}", configPath: "%LOCALAPPDATA%\\Packages\\Claude_…\\claude_desktop_config.json", config: "{}" },
   { id: "codex", name: "Codex CLI", monogram: "CX", state: "notConfigured", command: `codex mcp add outerspace -- "${shim}"`, configPath: "~/.codex/config.toml", config: "" },
   { id: "opencode", name: "OpenCode", monogram: "OC", state: "notConfigured", command: "", configPath: "~/.config/opencode/opencode.json", config: "{}" },
 ];

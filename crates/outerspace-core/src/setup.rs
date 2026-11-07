@@ -1,6 +1,8 @@
 //! Connecting MCP clients to OuterSpace. Each client gets the stdio shim
 //! (`outerspace-mcp.exe`, shipped next to OuterSpace.exe) as a local server named "outerspace":
 //! - Claude Code through its own CLI (`claude mcp add --scope user`), which owns `~/.claude.json`;
+//! - the Claude desktop app by editing `claude_desktop_config.json` (it has no CLI), wherever its
+//!   version keeps it (see [`claude_desktop_config`]);
 //! - Codex by editing `~/.codex/config.toml` with toml_edit (comments survive), adding a longer
 //!   startup timeout because the shim may have to start OuterSpace first;
 //! - OpenCode by editing its `opencode.jsonc`/`opencode.json` as a JSONC tree (comments survive) —
@@ -23,12 +25,13 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 #[serde(rename_all = "lowercase")]
 pub enum Client {
     Claude,
+    ClaudeDesktop,
     Codex,
     OpenCode,
 }
 
 impl Client {
-    pub const ALL: [Client; 3] = [Client::Claude, Client::Codex, Client::OpenCode];
+    pub const ALL: [Client; 4] = [Client::Claude, Client::ClaudeDesktop, Client::Codex, Client::OpenCode];
 
     pub fn parse(id: &str) -> Option<Client> {
         Client::ALL.into_iter().find(|c| c.id() == id)
@@ -37,6 +40,7 @@ impl Client {
     pub fn id(self) -> &'static str {
         match self {
             Client::Claude => "claude",
+            Client::ClaudeDesktop => "claude-desktop",
             Client::Codex => "codex",
             Client::OpenCode => "opencode",
         }
@@ -94,6 +98,18 @@ pub fn describe(client: Client, shim: &Path) -> ClientInfo {
                 &serde_json::json!({ "mcpServers": { SERVER: { "type": "stdio", "command": shim_text, "args": [] } } }),
             ),
         },
+        Client::ClaudeDesktop => {
+            let config = pretty(&serde_json::json!({ "mcpServers": { SERVER: { "command": shim_text, "args": [] } } }));
+            ClientInfo {
+                id: client.id(),
+                name: "Claude Desktop",
+                monogram: "CD",
+                state,
+                config_path: claude_desktop_config().display().to_string(),
+                command: config.clone(),
+                config,
+            }
+        }
         Client::Codex => ClientInfo {
             id: client.id(),
             name: "Codex CLI",
@@ -125,6 +141,11 @@ pub fn describe(client: Client, shim: &Path) -> ClientInfo {
 pub fn add(client: Client, shim: &Path) -> Result<String, SetupError> {
     match client {
         Client::Claude => add_claude(shim),
+        Client::ClaudeDesktop => {
+            let path = claude_desktop_config();
+            edit(&path, |text| claude_desktop_with_server(text, shim))?;
+            Ok(format!("Added to {}. Quit and reopen the Claude app to load it", path.display()))
+        }
         Client::Codex => {
             let path = codex_config();
             edit(&path, |text| codex_with_server(text, shim))?;
@@ -144,6 +165,9 @@ fn state(client: Client, shim: &Path) -> State {
             let value: serde_json::Value = serde_json::from_str(&text).ok()?;
             value["mcpServers"][SERVER]["command"].as_str().map(str::to_owned)
         }),
+        Client::ClaudeDesktop => {
+            std::fs::read_to_string(claude_desktop_config()).ok().and_then(|text| claude_desktop_command(&text))
+        }
         Client::Codex => std::fs::read_to_string(codex_config()).ok().and_then(|text| codex_command(&text)),
         Client::OpenCode => std::fs::read_to_string(opencode_config()).ok().and_then(|text| opencode_command(&text)),
     };
@@ -179,6 +203,30 @@ fn run(program: &Path, args: &[&str]) -> Result<(), SetupError> {
         let message = if stderr.trim().is_empty() { stdout } else { stderr };
         Err(SetupError(message.trim().to_owned()))
     }
+}
+
+/// `mcpServers.outerspace` set to the shim; the app's other settings and servers stay as they were.
+fn claude_desktop_with_server(text: &str, shim: &Path) -> Result<String, SetupError> {
+    let text = if text.trim().is_empty() { "{}" } else { text };
+    let root = CstRootNode::parse(text, &ParseOptions::default())
+        .map_err(|e| SetupError(format!("the Claude app's config could not be read: {e}")))?;
+    let servers = root.object_value_or_set().object_value_or_set("mcpServers");
+    let server = CstInputValue::Object(vec![
+        ("command".into(), shim.display().to_string().into()),
+        ("args".into(), CstInputValue::Array(vec![])),
+    ]);
+    match servers.get(SERVER) {
+        Some(existing) => existing.set_value(server),
+        None => {
+            servers.append(SERVER, server);
+        }
+    }
+    Ok(root.to_string())
+}
+
+fn claude_desktop_command(text: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    value["mcpServers"][SERVER]["command"].as_str().map(str::to_owned)
 }
 
 /// `[mcp_servers.outerspace]` set to the shim; everything else in the file left as it was.
@@ -256,6 +304,55 @@ fn home() -> PathBuf {
     std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_default()
 }
 
+/// Where the Claude app reads its config, which has moved between versions: the installer's builds
+/// use `%APPDATA%\Claude`; Microsoft Store builds used their package's own AppData
+/// (`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude`) and later moved to
+/// `%LOCALAPPDATA%\Claude-Data\claude_<id>`, leaving a `.user-data-left.*` note behind. An existing
+/// file wins; otherwise the newest of those folders that exists.
+fn claude_desktop_config() -> PathBuf {
+    const FILE: &str = "claude_desktop_config.json";
+    let local =
+        std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| home().join("AppData").join("Local"));
+    let roaming =
+        std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(|| home().join("AppData").join("Roaming"));
+    let mut folders = subfolders(&local.join("Claude-Data"), "claude_");
+    folders.extend(
+        subfolders(&local.join("Packages"), "Claude_")
+            .into_iter()
+            .map(|package| package.join("LocalCache").join("Roaming").join("Claude"))
+            .filter(|folder| !moved_away(folder)),
+    );
+    folders.push(roaming.join("Claude"));
+    folders
+        .iter()
+        .map(|folder| folder.join(FILE))
+        .find(|file| file.is_file())
+        .or_else(|| folders.iter().find(|folder| folder.is_dir()).map(|folder| folder.join(FILE)))
+        .unwrap_or_else(|| roaming.join("Claude").join(FILE))
+}
+
+/// Folders in `dir` whose name starts with `prefix` (case-insensitively).
+fn subfolders(dir: &Path, prefix: &str) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_dir()
+                && path
+                    .file_name()
+                    .is_some_and(|name| name.to_string_lossy().to_lowercase().starts_with(&prefix.to_lowercase()))
+        })
+        .collect()
+}
+
+/// The Claude app left a note saying its data moved elsewhere.
+fn moved_away(folder: &Path) -> bool {
+    std::fs::read_dir(folder)
+        .map(|entries| entries.flatten().any(|e| e.file_name().to_string_lossy().starts_with(".user-data-left")))
+        .unwrap_or(false)
+}
+
 fn codex_config() -> PathBuf {
     std::env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(|| home().join(".codex")).join("config.toml")
 }
@@ -325,6 +422,39 @@ mod tests {
         let updated = opencode_with_server("", Path::new(SHIM)).unwrap();
         assert!(updated.contains("opencode.ai/config.json"));
         assert_eq!(opencode_command(&updated).as_deref(), Some(SHIM));
+    }
+
+    #[test]
+    fn claude_desktop_keeps_its_settings_and_servers() {
+        let original = "{\n  \"mcpServers\": {\n    \"blender\": { \"command\": \"uvx\", \"args\": [\"blender-mcp\"] }\n  },\n  \"preferences\": { \"sidebarMode\": \"chat\" }\n}\n";
+        let updated = claude_desktop_with_server(original, Path::new(SHIM)).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&updated).unwrap();
+        assert_eq!(value["mcpServers"]["blender"]["command"], "uvx", "{updated}");
+        assert_eq!(value["preferences"]["sidebarMode"], "chat", "{updated}");
+        assert_eq!(claude_desktop_command(&updated).as_deref(), Some(SHIM));
+        let again = claude_desktop_with_server(&updated, Path::new(SHIM)).unwrap();
+        assert_eq!(again.matches("\"outerspace\"").count(), 1, "{again}");
+    }
+
+    #[test]
+    fn claude_desktop_from_nothing() {
+        let updated = claude_desktop_with_server("", Path::new(SHIM)).unwrap();
+        assert_eq!(claude_desktop_command(&updated).as_deref(), Some(SHIM));
+    }
+
+    /// Runs the edit on this PC's Claude app config in memory and checks nothing else changes;
+    /// the file itself is only read. `cargo test --release -p outerspace-core real_claude -- --ignored`
+    #[test]
+    #[ignore = "reads this PC's Claude app config"]
+    fn real_claude_desktop_config_survives() {
+        let path = claude_desktop_config();
+        let original = std::fs::read_to_string(&path).expect("the Claude app config");
+        let updated = claude_desktop_with_server(&original, Path::new(SHIM)).unwrap();
+        let (mut before, after): (serde_json::Value, serde_json::Value) =
+            (serde_json::from_str(&original).unwrap(), serde_json::from_str(&updated).unwrap());
+        before["mcpServers"][SERVER] = serde_json::json!({ "command": SHIM, "args": [] });
+        assert_eq!(before, after, "only mcpServers.outerspace may change");
+        println!("{}: ok, {} servers after the edit", path.display(), after["mcpServers"].as_object().unwrap().len());
     }
 
     #[test]
