@@ -25,7 +25,21 @@
     "changed": "Virtual display set to {width} × {height}",
     "scaleOption": "{percent}%",
     "scaleTitle": "Scale: how big text and apps look on the virtual display. Windows recommends {recommended}%.",
-    "scaleChanged": "Virtual display scale set to {percent}%"
+    "scaleChanged": "Virtual display scale set to {percent}%",
+    "scale": "Scale",
+    "scaleOff": "—",
+    "scaleOffTitle": "Turn the virtual display on to choose its scale: Windows only lists the scales a display allows while it is on."
+  },
+  "settings": {
+    "title": "Settings",
+    "back": "Back",
+    "startup": "Startup",
+    "autostart": "Start with Windows",
+    "turnOnAtStart": "Turn on the virtual display at startup",
+    "headlessHint": "With both on, the virtual display is ready as soon as you log in: a PC without a monitor still has a display for its GPU.",
+    "display": "Virtual display",
+    "fence": "Keep my mouse out of the virtual display",
+    "fenceTitle": "Your cursor stops at the edge instead of wandering onto the virtual display."
   },
   "dock": {
     "bringBack": "{name}\nClick to move it to your screen",
@@ -80,7 +94,7 @@
   },
   "footer": {
     "logs": "Logs",
-    "autostart": "Start with Windows"
+    "settings": "Settings"
   },
   "tray": {
     "headerOff": "OuterSpace — Off",
@@ -94,6 +108,7 @@
     "peek": "Peek at the virtual display",
     "fence": "Keep my mouse out of the virtual display",
     "autostart": "Start with Windows",
+    "turnOnAtStart": "Turn on the virtual display at startup",
     "quit": "Quit"
   }
 }

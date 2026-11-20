@@ -24,7 +24,7 @@
       <div class="title" data-i18n="app.name"></div>
     </header>
 
-    <main>
+    <main id="home">
       <section class="card power" id="power" data-state="off">
         <div class="power-row">
           <div class="power-text">
@@ -40,13 +40,6 @@
           <button class="link" id="btn-peek" data-i18n="peek.open" data-i18n-title="peek.openTitle" hidden></button>
         </p>
         <div class="dock" id="dock" hidden></div>
-        <div class="setting" id="resolution-row">
-          <label for="resolution" data-i18n="display.resolution"></label>
-          <div class="popups">
-            <select class="popup" id="resolution" data-i18n-title="display.resolutionTitle"></select>
-            <select class="popup" id="scale" hidden></select>
-          </div>
-        </div>
         <div class="power-actions" id="power-actions" hidden>
           <button class="btn primary" id="btn-install" data-i18n="actions.installDriver"></button>
           <button class="btn primary" id="btn-restart-driver" data-i18n="actions.restartDriver"></button>
@@ -65,16 +58,57 @@
       <section class="card manual" id="manual" hidden></section>
     </main>
 
+    <main id="settings" hidden>
+      <div class="page-head">
+        <button class="link back" id="btn-back" data-i18n="settings.back"></button>
+        <h1 class="heading" data-i18n="settings.title"></h1>
+      </div>
+
+      <h2 class="section-label" data-i18n="settings.startup"></h2>
+      <section class="card rows">
+        <label class="row" for="autostart">
+          <span data-i18n="settings.autostart"></span>
+          <span class="mini-toggle">
+            <input type="checkbox" id="autostart">
+            <span class="mini-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="row" for="turn-on-at-start">
+          <span data-i18n="settings.turnOnAtStart"></span>
+          <span class="mini-toggle">
+            <input type="checkbox" id="turn-on-at-start">
+            <span class="mini-track" aria-hidden="true"></span>
+          </span>
+        </label>
+      </section>
+      <p class="caption" data-i18n="settings.headlessHint"></p>
+
+      <h2 class="section-label" data-i18n="settings.display"></h2>
+      <section class="card rows">
+        <div class="row">
+          <label for="resolution" data-i18n="display.resolution"></label>
+          <select class="popup" id="resolution" data-i18n-title="display.resolutionTitle"></select>
+        </div>
+        <div class="row">
+          <label for="scale" data-i18n="display.scale"></label>
+          <select class="popup" id="scale"></select>
+        </div>
+        <label class="row" for="fence" data-i18n-title="settings.fenceTitle">
+          <span data-i18n="settings.fence"></span>
+          <span class="mini-toggle">
+            <input type="checkbox" id="fence">
+            <span class="mini-track" aria-hidden="true"></span>
+          </span>
+        </label>
+      </section>
+    </main>
+
     <footer class="footer">
       <span id="version"></span>
       <span class="sep" aria-hidden="true">·</span>
       <button class="link" id="btn-logs" data-i18n="footer.logs"></button>
       <span class="sep" aria-hidden="true">·</span>
-      <label class="mini-toggle">
-        <span data-i18n="footer.autostart"></span>
-        <input type="checkbox" id="autostart">
-        <span class="mini-track" aria-hidden="true"></span>
-      </label>
+      <button class="link" id="btn-settings" data-i18n="footer.settings"></button>
     </footer>
   </div>
 

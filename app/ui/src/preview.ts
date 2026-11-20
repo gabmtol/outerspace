@@ -49,6 +49,8 @@ const status: Status = {
     [1280, 720], [1280, 800], [1366, 768], [1440, 900], [1600, 900], [1680, 1050], [1920, 1080],
     [1920, 1200], [2560, 1080], [2560, 1440], [2560, 1600], [3440, 1440], [3840, 2160],
   ].map(([width, height]) => ({ width, height, hz: 60 })),
+  turnOnAtStart: params.has("startup"),
+  fence: true,
   scales: params.get("state") === "on" ? { current: 125, recommended: 100, available: [100, 125, 150, 175] } : null,
 };
 
@@ -57,6 +59,8 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
     status.mode = { width: Number(args?.width), height: Number(args?.height), hz: 60 };
     if (status.power.kind === "on") status.power.display = { ...status.power.display, ...status.mode };
   }
+  if (cmd === "set_turn_on_at_start") status.turnOnAtStart = Boolean(args?.enabled);
+  if (cmd === "set_fence") status.fence = Boolean(args?.enabled);
   if (cmd === "set_scale" && status.scales) status.scales.current = Number(args?.percent);
   if (cmd === "bring_back") status.windows = status.windows.filter((win) => win.hwnd !== args?.hwnd);
   const replies: Record<string, unknown> = { status, client_snippets: snippets };

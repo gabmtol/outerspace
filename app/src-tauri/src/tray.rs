@@ -1,5 +1,5 @@
+use outerspace_core::PowerState;
 use outerspace_core::input::fence::Fence;
-use outerspace_core::{PowerState, config};
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -105,6 +105,7 @@ fn menu(app: &AppHandle, state: &PowerState) -> tauri::Result<Menu<Wry>> {
     let busy = matches!(state, PowerState::Starting | PowerState::Stopping);
     let on = matches!(state, PowerState::On { .. });
     let autostart = app.autolaunch().is_enabled().unwrap_or(false);
+    let turn_on_at_start = app.state::<AppState>().turn_on_at_start.load(std::sync::atomic::Ordering::Relaxed);
     Menu::with_items(
         app,
         &[
@@ -116,6 +117,14 @@ fn menu(app: &AppHandle, state: &PowerState) -> tauri::Result<Menu<Wry>> {
             &PredefinedMenuItem::separator(app)?,
             &CheckMenuItem::with_id(app, "fence", t("tray.fence"), true, Fence::enabled(), None::<&str>)?,
             &CheckMenuItem::with_id(app, "autostart", t("tray.autostart"), true, autostart, None::<&str>)?,
+            &CheckMenuItem::with_id(
+                app,
+                "turn-on-at-start",
+                t("tray.turnOnAtStart"),
+                true,
+                turn_on_at_start,
+                None::<&str>,
+            )?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "quit", t("tray.quit"), true, None::<&str>)?,
         ],
@@ -131,19 +140,15 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
         }
         "open" => show_window(app),
         "peek" => crate::peek::open(app),
-        "fence" => {
-            let enabled = !Fence::enabled();
-            Fence::set_enabled(enabled);
-            let mut settings = config::load_or_create();
-            settings.fence = enabled;
-            config::save(&settings);
-            tracing::info!(enabled, "mouse fence toggled");
-            refresh(app);
-        }
+        "fence" => commands::store_fence(app, !Fence::enabled()),
         "autostart" => {
             let launcher = app.autolaunch();
             let _ = if launcher.is_enabled().unwrap_or(false) { launcher.disable() } else { launcher.enable() };
             commands::publish(app);
+        }
+        "turn-on-at-start" => {
+            let enabled = !app.state::<AppState>().turn_on_at_start.load(std::sync::atomic::Ordering::Relaxed);
+            commands::store_turn_on_at_start(app, enabled);
         }
         "quit" => app.exit(0),
         _ => {}

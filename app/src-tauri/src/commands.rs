@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
+use std::time::Duration;
 
 use base64::Engine;
 use outerspace_core::apps::{Keeper, WindowInfo};
 use outerspace_core::display::scale::Scales;
+use outerspace_core::input::fence::Fence;
 use outerspace_core::setup::{self, Client, ClientInfo};
 use outerspace_core::{DisplayMode, MCP_PORT, PowerController, PowerState, apps, config, paths, system};
 use serde::Serialize;
@@ -17,10 +19,12 @@ pub struct AppState {
     pub power: Arc<PowerController>,
     pub keeper: Arc<Keeper>,
     pub installing: AtomicBool,
+    /// Mirrors `turn_on_at_start` in config.json.
+    pub turn_on_at_start: AtomicBool,
     /// Stops the MCP server on exit.
     pub mcp_stop: outerspace_mcp::CancellationToken,
     /// Keeps the user's mouse out of the virtual display for as long as the app runs.
-    pub _fence: outerspace_core::input::fence::Fence,
+    pub _fence: Fence,
 }
 
 /// Everything the UI renders. Mirrored by `Status` in app/ui/src/types.ts.
@@ -40,6 +44,8 @@ pub struct Status {
     modes: Vec<DisplayMode>,
     /// The display's scale and the ones it allows, while it is on.
     scales: Option<Scales>,
+    turn_on_at_start: bool,
+    fence: bool,
 }
 
 /// A window on the virtual display, as the UI lists it.
@@ -96,6 +102,8 @@ pub fn snapshot(app: &AppHandle) -> Status {
         mode: state.power.mode(),
         modes: state.power.modes().to_vec(),
         scales: state.power.scales(),
+        turn_on_at_start: state.turn_on_at_start.load(Ordering::Relaxed),
+        fence: Fence::enabled(),
     }
 }
 
@@ -109,6 +117,58 @@ pub fn publish(app: &AppHandle) {
 pub async fn switch_power(app: &AppHandle, on: bool) {
     let power = app.state::<AppState>().power.clone();
     let _ = tauri::async_runtime::spawn_blocking(move || if on { power.turn_on() } else { power.turn_off() }).await;
+}
+
+/// Turns the display on as OuterSpace starts, when the user asked for it. Right after logging in
+/// the display driver may not be up yet, so a failed attempt is tried again for about a minute.
+pub async fn turn_on_at_start(app: &AppHandle) {
+    const ATTEMPTS: u32 = 7;
+    for attempt in 1..=ATTEMPTS {
+        switch_power(app, true).await;
+        let state = app.state::<AppState>().power.state();
+        match state {
+            PowerState::Error { .. } if attempt < ATTEMPTS => {
+                tracing::warn!(attempt, ?state, "could not turn on at startup; trying again in 10 s");
+                let _ = tauri::async_runtime::spawn_blocking(|| std::thread::sleep(Duration::from_secs(10))).await;
+            }
+            _ => {
+                tracing::info!(attempt, ?state, "turn on at startup");
+                return;
+            }
+        }
+    }
+}
+
+/// Whether the display turns on when OuterSpace starts; shared by the window and the tray.
+pub fn store_turn_on_at_start(app: &AppHandle, enabled: bool) {
+    app.state::<AppState>().turn_on_at_start.store(enabled, Ordering::Relaxed);
+    let mut settings = config::load_or_create();
+    settings.turn_on_at_start = enabled;
+    config::save(&settings);
+    tracing::info!(enabled, "turn on at startup");
+    publish(app);
+}
+
+/// Keeps the user's mouse out of the virtual display, or lets it in; shared by the window and the tray.
+pub fn store_fence(app: &AppHandle, enabled: bool) {
+    Fence::set_enabled(enabled);
+    let mut settings = config::load_or_create();
+    settings.fence = enabled;
+    config::save(&settings);
+    tracing::info!(enabled, "mouse fence toggled");
+    publish(app);
+}
+
+#[tauri::command]
+pub fn set_fence(app: AppHandle, enabled: bool) -> Status {
+    store_fence(&app, enabled);
+    snapshot(&app)
+}
+
+#[tauri::command]
+pub fn set_turn_on_at_start(app: AppHandle, enabled: bool) -> Status {
+    store_turn_on_at_start(&app, enabled);
+    snapshot(&app)
 }
 
 /// Async so the window list and its icons are gathered off the UI thread.

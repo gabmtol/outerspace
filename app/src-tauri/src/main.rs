@@ -37,6 +37,8 @@ fn main() {
             commands::set_power,
             commands::set_resolution,
             commands::set_scale,
+            commands::set_turn_on_at_start,
+            commands::set_fence,
             commands::install_driver,
             commands::restart_driver,
             commands::set_autostart,
@@ -87,6 +89,7 @@ fn main() {
                 power,
                 keeper,
                 installing: AtomicBool::new(false),
+                turn_on_at_start: AtomicBool::new(settings.turn_on_at_start),
                 mcp_stop,
                 _fence: fence,
             });
@@ -94,10 +97,14 @@ fn main() {
             if !std::env::args().any(|arg| arg == HIDDEN_ARG) {
                 tray::show_window(app.handle());
             }
-            // Dev builds only: lets the hardware tests restart the app without a human at the switch.
-            if cfg!(debug_assertions) && std::env::var_os("OUTERSPACE_DEV_AUTO_ON").is_some() {
+            // "Turn on when OuterSpace starts": with Start with Windows, how a PC without a monitor
+            // gets a display for its GPU at login. Dev builds also take an env var, so the hardware
+            // tests can restart the app without a human at the switch.
+            if settings.turn_on_at_start
+                || cfg!(debug_assertions) && std::env::var_os("OUTERSPACE_DEV_AUTO_ON").is_some()
+            {
                 let handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move { commands::switch_power(&handle, true).await });
+                tauri::async_runtime::spawn(async move { commands::turn_on_at_start(&handle).await });
             }
             Ok(())
         })

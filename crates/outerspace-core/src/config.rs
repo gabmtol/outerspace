@@ -20,6 +20,10 @@ pub struct Config {
     /// The virtual display's scale in percent; absent, Windows picks it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<u32>,
+    /// Turn the virtual display on as soon as OuterSpace starts (with "Start with Windows": at
+    /// login), so a PC without a monitor has a display for its GPU.
+    #[serde(default)]
+    pub turn_on_at_start: bool,
 }
 
 fn on() -> bool {
@@ -35,7 +39,13 @@ pub fn load() -> Option<Config> {
 /// Reads the config, creating it (with a fresh random token) on first run.
 pub fn load_or_create() -> Config {
     load().unwrap_or_else(|| {
-        let config = Config { token: random_token(), fence: true, mode: DisplayMode::DEFAULT, scale: None };
+        let config = Config {
+            token: random_token(),
+            fence: true,
+            mode: DisplayMode::DEFAULT,
+            scale: None,
+            turn_on_at_start: false,
+        };
         save(&config);
         config
     })

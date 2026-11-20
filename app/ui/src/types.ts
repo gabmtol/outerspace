@@ -59,6 +59,10 @@ export interface Status {
   modes: DisplayMode[];
   /** The virtual display's scale, while it is on. */
   scales: Scales | null;
+  /** Turn the virtual display on as soon as OuterSpace starts. */
+  turnOnAtStart: boolean;
+  /** Keep the user's mouse out of the virtual display. */
+  fence: boolean;
 }
 
 export interface ClientSnippet {

@@ -26,6 +26,7 @@ O OuterSpace cria um **monitor virtual de verdade** no Windows (um display que a
 - **Um switch.** Ligado: o monitor virtual aparece e o servidor MCP aceita chamadas. Desligado: o monitor some e tudo é bloqueado.
 - **Setup em um clique** para **Claude Code**, o **app do Claude**, **Codex CLI** e **OpenCode** (ou qualquer cliente MCP).
 - **Sem problemas de GPU.** Como é um display ativo, Chrome, VS Code e apps DirectX renderizam como em qualquer monitor — diferente de janelas minimizadas ou desktops ocultos.
+- **Serve em PC sem monitor.** Em **Settings**, com **Start with Windows** e **Turn on the virtual display at startup** ligados, o monitor virtual liga sozinho no login e a GPU já tem uma tela para renderizar, sem monitor físico nem plugue "dummy". (O Windows só roda programas de inicialização depois do login: num PC sem monitor, configure o login automático.)
 
 <p align="center">
   <img src="docs/images/ui-preview.png" alt="Janela do OuterSpace: desligado, ativo, driver ausente (escuro) e ativo (escuro)">
@@ -141,6 +142,7 @@ O ícone é o **Twin**: uma tela laranja e a sua gêmea virtual de vidro fosco. 
 | v1 | Escolher a escala (100% até o máximo que o Windows permite na resolução) | ✅ |
 | v1 | Setup em um clique para o app do Claude (Claude Desktop) | ✅ |
 | v1 | Devolver janelas: pelos ícones na janela do app ou com `return_window` | ✅ |
+| v1 | Ligar o monitor virtual quando o app inicia (PC sem monitor) | ✅ |
 | v1 | `ui_tree` e `wait_for` para os agentes | |
 | v1 | Atualização automática | |
 | v1 | `drag` e `focus_window` | |

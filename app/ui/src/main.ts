@@ -19,7 +19,6 @@ const statusDetail = $("#status-detail");
 const detailLine = $("#detail-line");
 const peekButton = $<HTMLButtonElement>("#btn-peek");
 const dock = $("#dock");
-const resolutionRow = $("#resolution-row");
 const resolution = $<HTMLSelectElement>("#resolution");
 const scale = $<HTMLSelectElement>("#scale");
 const powerActions = $("#power-actions");
@@ -27,6 +26,11 @@ const installButton = $<HTMLButtonElement>("#btn-install");
 const restartDriverButton = $<HTMLButtonElement>("#btn-restart-driver");
 const retryButton = $<HTMLButtonElement>("#btn-retry");
 const autostart = $<HTMLInputElement>("#autostart");
+const turnOnAtStart = $<HTMLInputElement>("#turn-on-at-start");
+const fence = $<HTMLInputElement>("#fence");
+const home = $("#home");
+const settingsPage = $("#settings");
+const settingsLink = $<HTMLButtonElement>("#btn-settings");
 const manual = $("#manual");
 const manualButton = $<HTMLButtonElement>("#btn-manual");
 const toast = $("#toast");
@@ -96,7 +100,6 @@ function render(status: Status): void {
   detailLine.hidden = detail === "" && peekButton.hidden;
   renderDock(power.kind === "on" ? status.windows : []);
 
-  resolutionRow.hidden = power.kind === "error";
   if (resolution.options.length !== status.modes.length) {
     resolution.replaceChildren(
       ...status.modes.map((mode) => new Option(t("display.mode", { ...mode }), modeKey(mode))),
@@ -107,7 +110,12 @@ function render(status: Status): void {
 
   // Windows only says which scales a display allows while it is on.
   const scales = power.kind === "on" ? status.scales : null;
-  scale.hidden = !scales;
+  if (!scales && scale.dataset.choices !== "") {
+    scale.dataset.choices = "";
+    scale.replaceChildren(new Option(t("display.scaleOff"), ""));
+    scale.title = t("display.scaleOffTitle");
+    scale.setAttribute("aria-label", scale.title);
+  }
   if (scales) {
     const choices = scales.available.join();
     if (scale.dataset.choices !== choices) {
@@ -120,7 +128,7 @@ function render(status: Status): void {
     scale.title = t("display.scaleTitle", { recommended: scales.recommended });
     scale.setAttribute("aria-label", scale.title);
   }
-  scale.disabled = busy || changingScale;
+  scale.disabled = !scales || busy || changingScale;
 
   installButton.disabled = status.installing;
   installButton.textContent = t(status.installing ? "actions.installing" : "actions.installDriver");
@@ -132,6 +140,8 @@ function render(status: Status): void {
   $("#server-caption").textContent = t("server.caption", { port: status.port });
   $("#version").textContent = `v${status.version}`;
   autostart.checked = status.autostart;
+  turnOnAtStart.checked = status.turnOnAtStart;
+  fence.checked = status.fence;
 }
 
 /** The windows on the virtual display, as icons: clicking one moves it to the user's screen. */
@@ -289,6 +299,29 @@ restartDriverButton.addEventListener("click", async () => {
 
 retryButton.addEventListener("click", async () => {
   const status = await run<Status>("set_power", { on: true });
+  if (status) render(status);
+});
+
+fence.addEventListener("change", async () => {
+  const status = await run<Status>("set_fence", { enabled: fence.checked });
+  if (status) render(status);
+});
+
+/** The settings page takes the place of the main one, in the same window. */
+function showSettings(open: boolean): void {
+  home.hidden = open;
+  settingsPage.hidden = !open;
+  settingsLink.hidden = open;
+  settingsLink.previousElementSibling!.toggleAttribute("hidden", open);
+}
+
+settingsLink.addEventListener("click", () => showSettings(true));
+$("#btn-back").addEventListener("click", () => showSettings(false));
+// Design previews open it with index.html#settings.
+if (location.hash === "#settings") showSettings(true);
+
+turnOnAtStart.addEventListener("change", async () => {
+  const status = await run<Status>("set_turn_on_at_start", { enabled: turnOnAtStart.checked });
   if (status) render(status);
 });
 
